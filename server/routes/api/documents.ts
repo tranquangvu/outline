@@ -27,12 +27,16 @@ import {
   User,
   View,
   Team,
+  DocumentUser,
+  Group,
+  DocumentGroup,
 } from "@server/models";
 import { authorize, cannot } from "@server/policies";
 import {
   presentCollection,
   presentDocument,
   presentPolicies,
+  presentUser,
 } from "@server/presenters";
 import {
   assertUuid,
@@ -395,6 +399,13 @@ router.post(
       shareId,
       user,
     });
+
+    // Check permission to read doc
+    // const document = await Document.scope({
+    //   method: ["withMembership", ctx.state.user.id],
+    // }).findByPk(id);
+    // authorize(user, "read", document);
+
     const isPublic = cannot(user, "read", document);
     const serializedDocument = await presentDocument(document, {
       isPublic,
@@ -840,6 +851,7 @@ router.post("documents.update", auth(), async (ctx) => {
     lastRevision,
     templateId,
     append,
+    permission,
   } = ctx.body;
   const editorVersion = ctx.headers["x-editor-version"] as string | undefined;
   assertPresent(id, "id is required");
@@ -880,6 +892,20 @@ router.post("documents.update", auth(), async (ctx) => {
   });
 
   invariant(collection, "collection not found");
+
+  if (permission) {
+    Event.schedule({
+      name: "documents._permission",
+      documentId: document.id,
+      collectionId: document.collectionId,
+      teamId: document.teamId,
+      actorId: user.id,
+      data: {
+        permission,
+      },
+      ip: ctx.request.ip,
+    });
+  }
 
   document.updatedBy = user;
   document.collection = collection;
@@ -1200,7 +1226,16 @@ router.post("documents.create", auth(), async (ctx) => {
   let parentDocument;
 
   if (parentDocumentId) {
-    parentDocument = await Document.findOne({
+    const collectionScope: Readonly<ScopeOptions> = {
+      method: ["withCollectionPermissions", user.id],
+    };
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user.id],
+    };
+    parentDocument = await Document.scope([
+      collectionScope,
+      membershipScope,
+    ]).findOne({
       where: {
         id: parentDocumentId,
         collectionId: collection.id,
@@ -1243,6 +1278,177 @@ router.post("documents.create", auth(), async (ctx) => {
     data: await presentDocument(document),
     policies: presentPolicies(user, [document]),
   });
+});
+
+router.post("documents.add_user", auth(), async (ctx) => {
+  const { id, collectionId, userId, permission = "read_write" } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(collectionId, "collectionId is required");
+  assertUuid(userId, "userId is required");
+
+  const document = await Document.findByPk(id);
+  authorize(ctx.state.user, "changePermission", document);
+
+  const user = await User.findByPk(userId);
+  authorize(ctx.state.user, "read", user);
+
+  let membership = await DocumentUser.findOne({
+    where: {
+      userId,
+      collectionId,
+      documentId: id,
+    },
+  });
+
+  if (!membership) {
+    membership = await DocumentUser.create({
+      userId,
+      permission,
+      collectionId,
+      documentId: id,
+      createdById: ctx.state.user.id,
+    });
+  } else if (permission) {
+    membership.permission = permission;
+    await membership.save();
+  }
+
+  await Event.create({
+    name: "documents.add_user",
+    userId,
+    collectionId,
+    documentId: id,
+    teamId: document?.teamId,
+    actorId: ctx.state.user.id,
+    data: {
+      name: user.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  ctx.body = {
+    data: {
+      users: [presentUser(user)],
+      // memberships: [presentMembership(membership)],
+    },
+  };
+
+  console.log(membership);
+});
+
+router.post("documents.remove_user", auth(), async (ctx) => {
+  const { id, collectionId, userId } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(collectionId, "collectionId is required");
+  assertUuid(userId, "userId is required");
+
+  const document = await Document.findByPk(id);
+  authorize(ctx.state.user, "changePermission", document);
+
+  const user = await User.findByPk(userId);
+  authorize(ctx.state.user, "read", user);
+
+  await document.$remove("user", user);
+
+  await Event.create({
+    name: "documents.remove_user",
+    userId,
+    collectionId: collectionId,
+    teamId: document.teamId,
+    actorId: ctx.state.user.id,
+    data: {
+      name: user.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  ctx.body = {
+    success: true,
+  };
+});
+
+router.post("documents.add_group", auth(), async (ctx) => {
+  const { id, collectionId, groupId, permission = "read_write" } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(groupId, "groupId is required");
+  assertUuid(collectionId, "collectionId is required");
+
+  const document = await Document.findByPk(id);
+  authorize(ctx.state.user, "changePermission", document);
+
+  const group = await Group.findByPk(groupId);
+  authorize(ctx.state.user, "read", group);
+
+  let membership = await DocumentGroup.findOne({
+    where: {
+      groupId,
+      collectionId,
+      documentId: id,
+    },
+  });
+
+  if (!membership) {
+    membership = await DocumentGroup.create({
+      groupId,
+      permission,
+      collectionId,
+      documentId: id,
+      createdById: ctx.state.user.id,
+    });
+  } else if (permission) {
+    membership.permission = permission;
+    await membership.save();
+  }
+
+  await Event.create({
+    name: "documents.add_group",
+    collectionId,
+    modelId: groupId,
+    teamId: document.teamId,
+    actorId: ctx.state.user.id,
+    data: {
+      name: group.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  // ctx.body = {
+  //   data: {
+  //     collectionGroupMemberships: [
+  //       presentCollectionGroupMembership(membership),
+  //     ],
+  //   },
+  // };
+});
+
+router.post("documents.remove_group", auth(), async (ctx) => {
+  const { id, collectionId, groupId } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(groupId, "groupId is required");
+  assertUuid(collectionId, "collectionId is required");
+
+  const document = await Document.findByPk(id);
+  authorize(ctx.state.user, "changePermission", document);
+
+  const group = await Group.findByPk(groupId);
+  authorize(ctx.state.user, "read", group);
+
+  await document.$remove("group", group);
+  await Event.create({
+    name: "collections.remove_group",
+    collectionId: collectionId,
+    teamId: document.teamId,
+    actorId: ctx.state.user.id,
+    modelId: groupId,
+    data: {
+      name: group.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  ctx.body = {
+    success: true,
+  };
 });
 
 export default router;

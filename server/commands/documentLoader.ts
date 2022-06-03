@@ -84,6 +84,32 @@ export default async function loadDocument({
         userId: user.id,
         paranoid: false,
       });
+      // const collectionScope: Readonly<ScopeOptions> = {
+      //   method: ["withCollectionPermissions", user.id],
+      // };
+      // const membershipScope: Readonly<ScopeOptions> = {
+      //   method: ["withMembership", user.id],
+      // };
+      // document = await Document.scope([
+      //   collectionScope,
+      //   membershipScope,
+      // ]).findOne({
+      //   where: {
+      //     id: share.documentId,
+      //   },
+      //   include: [
+      //     {
+      //       model: User,
+      //       as: "createdBy",
+      //       paranoid: false,
+      //     },
+      //     {
+      //       model: User,
+      //       as: "updatedBy",
+      //       paranoid: false,
+      //     },
+      //   ],
+      // });
     } else {
       document = share.document;
     }
