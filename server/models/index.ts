@@ -47,3 +47,7 @@ export { default as User } from "./User";
 export { default as UserAuthentication } from "./UserAuthentication";
 
 export { default as View } from "./View";
+
+export { default as DocumentUser } from "./DocumentUser";
+
+export { default as DocumentGroup } from "./DocumentGroup";

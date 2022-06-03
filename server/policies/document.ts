@@ -1,4 +1,5 @@
 import invariant from "invariant";
+import { some } from "lodash";
 import { Document, Revision, User, Team } from "@server/models";
 import { NavigationNode } from "~/types";
 import { allow, _cannot as cannot } from "./cancan";
@@ -16,8 +17,22 @@ allow(User, ["read", "download"], Document, (user, document) => {
   }
 
   // existence of collection option is not required here to account for share tokens
-  if (document.collection && cannot(user, "read", document.collection)) {
-    return false;
+  // if (document.collection && cannot(user, "read", document.collection)) {
+  //   return false;
+  // }
+
+  if (document.permission !== "read_write") {
+    invariant(
+      document.memberships,
+      "membership should be preloaded, did you forget withMembership scope?"
+    );
+    const allMemberships = [
+      ...document.memberships,
+      ...document.documentGroupMemberships,
+    ];
+    return some(allMemberships, (m) =>
+      ["read_write", "maintainer"].includes(m.permission)
+    );
   }
 
   return user.teamId === document.teamId;
@@ -341,4 +356,18 @@ allow(User, "unpublish", Document, (user, document) => {
     !hasChild(document.collection.documentStructure || []) &&
     user.teamId === document.teamId
   );
+});
+
+allow(User, "changePermission", Document, (user, document) => {
+  if (!document) {
+    return false;
+  }
+  if (document.archivedAt) {
+    return false;
+  }
+  if (document.deletedAt) {
+    return false;
+  }
+
+  return user.isAdmin;
 });
