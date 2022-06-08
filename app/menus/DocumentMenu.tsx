@@ -16,6 +16,7 @@ import {
   DownloadIcon,
   RestoreIcon,
   CrossIcon,
+  PadlockIcon,
 } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -26,9 +27,11 @@ import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import getDataTransferFiles from "@shared/utils/getDataTransferFiles";
 import Document from "~/models/Document";
+// import CollectionPermissions from "~/scenes/CollectionPermissions";
 import DocumentDelete from "~/scenes/DocumentDelete";
 import DocumentMove from "~/scenes/DocumentMove";
 import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";
+import DocumentPermissions from "~/scenes/DocumentPermissions";
 import DocumentTemplatize from "~/scenes/DocumentTemplatize";
 import CollectionIcon from "~/components/CollectionIcon";
 import ContextMenu from "~/components/ContextMenu";
@@ -104,6 +107,10 @@ function DocumentMenu({
   ] = React.useState(false);
   const [showMoveModal, setShowMoveModal] = React.useState(false);
   const [showTemplateModal, setShowTemplateModal] = React.useState(false);
+  const [
+    showCollectionPermissions,
+    setShowCollectionPermissions,
+  ] = React.useState(false);
   const file = React.useRef<HTMLInputElement>(null);
 
   const handleOpen = React.useCallback(() => {
@@ -395,6 +402,13 @@ function DocumentMenu({
             },
             {
               type: "button",
+              title: `${t("Permissions")}…`,
+              visible: can.update,
+              onClick: () => setShowCollectionPermissions(true),
+              icon: <PadlockIcon />,
+            },
+            {
+              type: "button",
               title: `${t("Delete")}…`,
               dangerous: true,
               onClick: () => setShowDeleteModal(true),
@@ -529,6 +543,16 @@ function DocumentMenu({
                 documentId={document.id}
                 onSubmit={() => setShowTemplateModal(false)}
               />
+            </Modal>
+          )}
+          {can.update && (
+            <Modal
+              title={t("Document permissions")}
+              onRequestClose={() => setShowCollectionPermissions(false)}
+              isOpen={showCollectionPermissions}
+            >
+              <DocumentPermissions document={document} />
+              {/* <CollectionPermissions collection={collection} /> */}
             </Modal>
           )}
         </>

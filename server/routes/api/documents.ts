@@ -29,13 +29,18 @@ import {
   DocumentUser,
   Group,
   DocumentGroup,
+  GroupUser,
 } from "@server/models";
 import { authorize, cannot, can } from "@server/policies";
 import {
   presentCollection,
   presentDocument,
+  presentDocumentMembership,
   presentPolicies,
   presentUser,
+  presentGroup,
+  presentDocumentGroupMembership,
+  presentMembership,
 } from "@server/presenters";
 import {
   assertUuid,
@@ -87,9 +92,9 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
     assertUuid(collectionId, "collection must be a UUID");
     where = { ...where, collectionId };
     const collection = await Collection.scope({
-      method: ["withMembership", user.id],
+      method: ["withDocumentMembership", user.id],
     }).findByPk(collectionId);
-    authorize(user, "read", collection);
+    authorize(user, "read_overview", collection);
 
     // index sort is special because it uses the order of the documents in the
     // collection.documentStructure rather than a database column
@@ -140,8 +145,57 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
 
   assertSort(sort, Document);
 
-  const documents = await Document.defaultScopeWithUser(user.id).findAll({
+  const collectionScope: Readonly<ScopeOptions> = {
+    method: ["withCollection", user.id],
+  };
+  const viewScope: Readonly<ScopeOptions> = {
+    method: ["withViews", user.id],
+  };
+  // const membershipScope: Readonly<ScopeOptions> = {
+  //   method: ["withMembership", user.id, collectionId],
+  // };
+
+  const documents = await Document.scope([
+    "defaultScope",
+    collectionScope,
+    viewScope,
+    // membershipScope,
+  ]).findAll({
     where,
+    include: [
+      {
+        model: DocumentUser,
+        as: "documentMemberships",
+        where: {
+          userId: user.id,
+          // collectionId,
+        },
+        required: false,
+      },
+      {
+        model: DocumentGroup,
+        as: "documentGroupMemberships",
+        required: false,
+        separate: true,
+        include: [
+          {
+            model: Group,
+            as: "group",
+            required: true,
+            include: [
+              {
+                model: GroupUser,
+                as: "groupMemberships",
+                required: true,
+                where: {
+                  userId: user.id,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
     order: [[sort, direction]],
     offset: ctx.state.pagination.offset,
     limit: ctx.state.pagination.limit,
@@ -158,7 +212,9 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
   const data = await Promise.all(
     documents.map((document) => presentDocument(document))
   );
+
   const policies = presentPolicies(user, documents);
+
   ctx.body = {
     pagination: ctx.state.pagination,
     data,
@@ -294,6 +350,38 @@ router.post("documents.viewed", auth(), pagination(), async (ctx) => {
               method: ["withMembership", userId],
             }),
             as: "collection",
+          },
+          {
+            model: DocumentUser,
+            as: "documentMemberships",
+            where: {
+              userId: user.id,
+              // collectionId,
+            },
+            required: false,
+          },
+          {
+            model: DocumentGroup,
+            as: "documentGroupMemberships",
+            required: false,
+            separate: true,
+            include: [
+              {
+                model: Group,
+                as: "group",
+                required: true,
+                include: [
+                  {
+                    model: GroupUser,
+                    as: "groupMemberships",
+                    required: true,
+                    where: {
+                      userId: user.id,
+                    },
+                  },
+                ],
+              },
+            ],
           },
         ],
       },
@@ -525,16 +613,53 @@ async function loadDocument({
       lastAccessedAt: new Date(),
     });
   } else {
-    // document = await Document.scope({
-    //   method: ["withMembership", user?.id],
-    // }).findByPk(id as string, {
-    //   // userId: user ? user.id : undefined,
-    //   paranoid: false,
-    // });
-
     document = await Document.findByPk(id as string, {
       userId: user ? user.id : undefined,
       paranoid: false,
+    });
+
+    const collectionScope: Readonly<ScopeOptions> = {
+      method: ["withCollection", user ? user.id : undefined],
+    };
+    // const viewScope: Readonly<ScopeOptions> = {
+    //   method: ["withViews", user.id],
+    // };
+    document = await Document.scope(["defaultScope", collectionScope]).findOne({
+      where: {
+        id,
+      },
+      include: [
+        {
+          model: DocumentUser,
+          as: "documentMemberships",
+          where: {
+            userId: user ? user.id : undefined,
+          },
+          required: false,
+        },
+        {
+          model: DocumentGroup,
+          as: "documentGroupMemberships",
+          required: false,
+          include: [
+            {
+              model: Group,
+              as: "group",
+              required: true,
+              include: [
+                {
+                  model: GroupUser,
+                  as: "groupMemberships",
+                  required: true,
+                  where: {
+                    userId: user ? user.id : undefined,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
     });
 
     if (!document) {
@@ -573,14 +698,6 @@ router.post(
       user,
     });
 
-    console.log(document);
-
-    // Check permission to read doc
-    // const document = await Document.scope({
-    //   method: ["withMembership", ctx.state.user.id],
-    // }).findByPk(id);
-    // authorize(user, "read", document);
-
     const isPublic = cannot(user, "read", document);
     const serializedDocument = await presentDocument(document, {
       isPublic,
@@ -598,6 +715,7 @@ router.post(
                 : undefined,
           }
         : serializedDocument;
+
     ctx.body = {
       data,
       policies: isPublic ? undefined : presentPolicies(user, [document]),
@@ -1542,11 +1660,9 @@ router.post("documents.add_user", auth(), async (ctx) => {
   ctx.body = {
     data: {
       users: [presentUser(user)],
-      // memberships: [presentMembership(membership)],
+      memberships: [presentMembership(membership)],
     },
   };
-
-  console.log(membership);
 });
 
 router.post("documents.remove_user", auth(), async (ctx) => {
@@ -1663,5 +1779,155 @@ router.post("documents.remove_group", auth(), async (ctx) => {
     success: true,
   };
 });
+
+router.post("documents.memberships", auth(), pagination(), async (ctx) => {
+  const { id, collectionId, query, permission } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(collectionId, "collectionId is required");
+  const { user } = ctx.state;
+
+  const document = await Document.findByPk(id, {
+    userId: user.id,
+    collectionId,
+  });
+  authorize(user, "read", document);
+
+  let where: WhereOptions<DocumentUser> = {
+    documentId: id,
+    collectionId: collectionId,
+  };
+  let userWhere;
+
+  if (query) {
+    userWhere = {
+      name: {
+        [Op.iLike]: `%${query}%`,
+      },
+    };
+  }
+
+  if (permission) {
+    where = { ...where, permission };
+  }
+
+  const memberships = await DocumentUser.findAll({
+    where,
+    order: [["createdAt", "DESC"]],
+    offset: ctx.state.pagination.offset,
+    limit: ctx.state.pagination.limit,
+    include: [
+      {
+        model: User,
+        as: "user",
+        where: userWhere,
+        required: true,
+      },
+    ],
+  });
+
+  ctx.body = {
+    pagination: ctx.state.pagination,
+    data: {
+      documentMemberships: memberships.map(presentDocumentMembership),
+      users: memberships.map((membership) => presentUser(membership.user)),
+    },
+  };
+});
+
+router.post(
+  "documents.group_memberships",
+  auth(),
+  pagination(),
+  async (ctx) => {
+    const { id, collectionId, query, permission } = ctx.body;
+    assertUuid(collectionId, "collectionId is required");
+    assertUuid(id, "id is required");
+    const { user } = ctx.state;
+
+    const document = await Document.findOne({
+      where: {
+        id,
+      },
+      include: [
+        {
+          model: DocumentUser,
+          as: "documentMemberships",
+          where: {
+            userId: user?.id,
+            documentId: id,
+            collectionId,
+          },
+          required: false,
+        },
+        {
+          model: DocumentGroup,
+          as: "documentGroupMemberships",
+          required: false,
+          separate: true,
+          include: [
+            {
+              model: Group,
+              as: "group",
+              required: true,
+              include: [
+                {
+                  model: GroupUser,
+                  as: "groupMemberships",
+                  required: true,
+                  where: {
+                    userId: user?.id,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    authorize(user, "read", document);
+
+    let where: WhereOptions<DocumentGroup> = {
+      documentId: id,
+      collectionId: collectionId,
+    };
+    let groupWhere;
+
+    if (query) {
+      groupWhere = {
+        name: {
+          [Op.iLike]: `%${query}%`,
+        },
+      };
+    }
+
+    if (permission) {
+      where = { ...where, permission };
+    }
+
+    const memberships = await DocumentGroup.findAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      offset: ctx.state.pagination.offset,
+      limit: ctx.state.pagination.limit,
+      include: [
+        {
+          model: Group,
+          as: "group",
+          where: groupWhere,
+          required: true,
+        },
+      ],
+    });
+    ctx.body = {
+      pagination: ctx.state.pagination,
+      data: {
+        documentGroupMemberships: memberships.map(
+          presentDocumentGroupMembership
+        ),
+        groups: memberships.map((membership) => presentGroup(membership.group)),
+      },
+    };
+  }
+);
 
 export default router;

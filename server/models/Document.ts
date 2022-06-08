@@ -109,7 +109,7 @@ export const DOCUMENT_VERSION = 2;
         include: [
           {
             model: Collection.scope({
-              method: ["withMembership", userId],
+              method: ["withDocumentMembership", userId],
             }),
             as: "collection",
             paranoid,
@@ -170,47 +170,61 @@ export const DOCUMENT_VERSION = 2;
       ],
     };
   },
-  withMembership: (userId: string) => ({
-    include: [
-      {
-        model: DocumentUser,
-        as: "memberships",
-        where: {
-          userId,
-        },
-        required: false,
-      },
-      {
-        model: DocumentGroup,
-        as: "documentGroupMemberships",
-        required: false,
-        // use of "separate" property: sequelize breaks when there are
-        // nested "includes" with alternating values for "required"
-        // see https://github.com/sequelize/sequelize/issues/9869
-        separate: true,
-        // include for groups that are members of this collection,
-        // of which userId is a member of, resulting in:
-        // CollectionGroup [inner join] Group [inner join] GroupUser [where] userId
-        include: [
-          {
-            model: Group,
-            as: "group",
-            required: true,
-            include: [
-              {
-                model: GroupUser,
-                as: "groupMemberships",
-                required: true,
-                where: {
-                  userId,
-                },
-              },
-            ],
+  withMembership: (userId: string, collectionId: string) => {
+    if (!userId || !collectionId) {
+      return {};
+    }
+
+    return {
+      include: [
+        {
+          model: DocumentUser,
+          as: "documentMemberships",
+          where: {
+            userId,
+            collectionId,
           },
-        ],
-      },
-    ],
-  }),
+          required: false,
+        },
+        {
+          model: DocumentGroup,
+          as: "documentGroupMemberships",
+          required: false,
+          // use of "separate" property: sequelize breaks when there are
+          // nested "includes" with alternating values for "required"
+          // see https://github.com/sequelize/sequelize/issues/9869
+          separate: true,
+          // include for groups that are members of this collection,
+          // of which userId is a member of, resulting in:
+          // CollectionGroup [inner join] Group [inner join] GroupUser [where] userId
+          include: [
+            {
+              model: Group,
+              as: "group",
+              required: true,
+              include: [
+                {
+                  model: GroupUser,
+                  as: "groupMemberships",
+                  required: true,
+                  where: {
+                    userId,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: Collection,
+          as: "collection",
+          where: {
+            id: collectionId,
+          },
+        },
+      ],
+    };
+  },
 }))
 @Table({ tableName: "documents", modelName: "document" })
 @Fix
@@ -438,7 +452,7 @@ class Document extends ParanoidModel {
   permission: "read" | "read_write" | null;
 
   @HasMany(() => DocumentUser, "documentId")
-  memberships: DocumentUser[];
+  documentMemberships: DocumentUser[];
 
   @HasMany(() => DocumentGroup, "documentId")
   documentGroupMemberships: DocumentGroup[];
@@ -463,6 +477,7 @@ class Document extends ParanoidModel {
     id: string,
     options: FindOptions<Document> & {
       userId?: string;
+      collectionId?: string;
     } = {}
   ) {
     // allow default preloading of collection membership if `userId` is passed in find options
@@ -475,6 +490,9 @@ class Document extends ParanoidModel {
       },
       {
         method: ["withViews", options.userId],
+      },
+      {
+        method: ["withMembership", options.userId, options.collectionId],
       },
     ]);
 

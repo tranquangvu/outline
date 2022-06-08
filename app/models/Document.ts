@@ -79,6 +79,18 @@ export default class Document extends ParanoidModel {
   @observable
   parentDocumentId: string | undefined;
 
+  @Field
+  @observable
+  permission: "read" | "read_write" | void;
+
+  @Field
+  @observable
+  sharing: boolean;
+
+  @Field
+  @observable
+  name: string;
+
   collaboratorIds: string[];
 
   createdBy: User;
@@ -285,9 +297,14 @@ export default class Document extends ParanoidModel {
       return;
     }
 
-    return this.store.rootStore.views.create({
-      documentId: this.id,
-    });
+    return this.store.rootStore.views.create(
+      {
+        documentId: this.id,
+      },
+      {
+        collectionId: this.collectionId,
+      }
+    );
   };
 
   @action

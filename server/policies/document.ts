@@ -16,22 +16,26 @@ allow(User, ["read", "download"], Document, (user, document) => {
     return false;
   }
 
-  // existence of collection option is not required here to account for share tokens
-  // if (document.collection && cannot(user, "read", document.collection)) {
-  //   return false;
-  // }
+  // invariant(
+  //   document.documentMemberships,
+  //   "documentMemberships should be preloaded, did you forget withMembership scope?"
+  // );
 
-  if (document.permission !== "read_write") {
-    invariant(
-      document.memberships,
-      "membership should be preloaded, did you forget withMembership scope?"
-    );
-    const allMemberships = [
-      ...document.memberships,
-      ...document.documentGroupMemberships,
-    ];
+  const allMemberships = [
+    ...(document?.documentMemberships || []),
+    ...(document?.documentGroupMemberships || []),
+  ];
+
+  if (allMemberships.length === 0) {
+    if (
+      document.collection &&
+      cannot(user, "read_overview", document.collection)
+    ) {
+      return false;
+    }
+  } else {
     return some(allMemberships, (m) =>
-      ["read_write", "maintainer"].includes(m.permission)
+      ["read", "read_write", "maintainer"].includes(m.permission)
     );
   }
 
