@@ -11,6 +11,7 @@ import {
   DataType,
 } from "sequelize-typescript";
 import CollectionGroup from "./CollectionGroup";
+import DocumentGroup from "./DocumentGroup";
 import GroupUser from "./GroupUser";
 import Team from "./Team";
 import User from "./User";
@@ -96,6 +97,9 @@ class Group extends ParanoidModel {
 
   @BelongsToMany(() => User, () => GroupUser)
   users: User[];
+
+  @HasMany(() => DocumentGroup, "groupId")
+  documentGroupMemberships: DocumentGroup[];
 }
 
 export default Group;

@@ -27,6 +27,8 @@ import { NavigationNode, CollectionSort } from "~/types";
 import CollectionGroup from "./CollectionGroup";
 import CollectionUser from "./CollectionUser";
 import Document from "./Document";
+import DocumentGroup from "./DocumentGroup";
+import DocumentUser from "./DocumentUser";
 import Group from "./Group";
 import GroupUser from "./GroupUser";
 import Team from "./Team";
@@ -103,6 +105,78 @@ type Sort = CollectionSort;
         // include for groups that are members of this collection,
         // of which userId is a member of, resulting in:
         // CollectionGroup [inner join] Group [inner join] GroupUser [where] userId
+        include: [
+          {
+            model: Group,
+            as: "group",
+            required: true,
+            include: [
+              {
+                model: GroupUser,
+                as: "groupMemberships",
+                required: true,
+                where: {
+                  userId,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }),
+  withDocumentMembership: (userId: string) => ({
+    include: [
+      {
+        model: CollectionUser,
+        as: "memberships",
+        where: {
+          userId,
+        },
+        required: false,
+      },
+      {
+        model: CollectionGroup,
+        as: "collectionGroupMemberships",
+        required: false,
+        // use of "separate" property: sequelize breaks when there are
+        // nested "includes" with alternating values for "required"
+        // see https://github.com/sequelize/sequelize/issues/9869
+        separate: true,
+        // include for groups that are members of this collection,
+        // of which userId is a member of, resulting in:
+        // CollectionGroup [inner join] Group [inner join] GroupUser [where] userId
+        include: [
+          {
+            model: Group,
+            as: "group",
+            required: true,
+            include: [
+              {
+                model: GroupUser,
+                as: "groupMemberships",
+                required: true,
+                where: {
+                  userId,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        model: DocumentUser,
+        as: "documentMemberships",
+        required: false,
+        where: {
+          userId,
+        },
+      },
+      {
+        model: DocumentGroup,
+        as: "documentGroupMemberships",
+        required: false,
+        separate: true,
         include: [
           {
             model: Group,
@@ -274,6 +348,12 @@ class Collection extends ParanoidModel {
   @ForeignKey(() => Team)
   @Column(DataType.UUID)
   teamId: string;
+
+  @HasMany(() => DocumentUser, "collectionId")
+  documentMemberships: DocumentUser[];
+
+  @HasMany(() => DocumentGroup, "collectionId")
+  documentGroupMemberships: DocumentGroup[];
 
   static DEFAULT_SORT = {
     field: "index",

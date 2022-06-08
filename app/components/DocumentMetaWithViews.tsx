@@ -27,9 +27,10 @@ function DocumentMetaWithViews({ to, isDraft, document, ...rest }: Props) {
     if (!document.isDeleted) {
       views.fetchPage({
         documentId: document.id,
+        collectionId: document.collectionId,
       });
     }
-  }, [views, document.id, document.isDeleted]);
+  }, [views, document.id, document.isDeleted, document.collectionId]);
 
   const popover = usePopoverState({
     gutter: 8,

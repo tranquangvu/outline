@@ -253,7 +253,7 @@ class User extends ParanoidModel {
 
   collectionIds = async (options = {}) => {
     const collectionStubs = await Collection.scope({
-      method: ["withMembership", this.id],
+      method: ["withDocumentMembership", this.id],
     }).findAll({
       attributes: ["id", "permission"],
       where: {
@@ -269,7 +269,9 @@ class User extends ParanoidModel {
           c.permission === "read" ||
           c.permission === "read_write" ||
           c.memberships.length > 0 ||
-          c.collectionGroupMemberships.length > 0
+          c.collectionGroupMemberships.length > 0 ||
+          c.documentMemberships.length > 0 ||
+          c.documentGroupMemberships.length > 0
       )
       .map((c) => c.id);
   };

@@ -15,6 +15,7 @@ import {
   DownloadIcon,
   RestoreIcon,
   CrossIcon,
+  PadlockIcon,
 } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -25,14 +26,17 @@ import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import getDataTransferFiles from "@shared/utils/getDataTransferFiles";
 import Document from "~/models/Document";
+// import CollectionPermissions from "~/scenes/CollectionPermissions";
 import DocumentDelete from "~/scenes/DocumentDelete";
 import DocumentMove from "~/scenes/DocumentMove";
 import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";
+import DocumentPermissions from "~/scenes/DocumentPermissions";
 import CollectionIcon from "~/components/CollectionIcon";
 import ContextMenu from "~/components/ContextMenu";
 import OverflowMenuButton from "~/components/ContextMenu/OverflowMenuButton";
 import Separator from "~/components/ContextMenu/Separator";
 import Template from "~/components/ContextMenu/Template";
+import DocumentTemplatizeDialog from "~/components/DocumentTemplatizeDialog";
 import Flex from "~/components/Flex";
 import Modal from "~/components/Modal";
 import Switch from "~/components/Switch";
@@ -101,6 +105,11 @@ function DocumentMenu({
     setShowPermanentDeleteModal,
   ] = React.useState(false);
   const [showMoveModal, setShowMoveModal] = React.useState(false);
+  const [showTemplateModal, setShowTemplateModal] = React.useState(false);
+  const [
+    showCollectionPermissions,
+    setShowCollectionPermissions,
+  ] = React.useState(false);
   const file = React.useRef<HTMLInputElement>(null);
 
   const handleOpen = React.useCallback(() => {
@@ -387,6 +396,13 @@ function DocumentMenu({
             },
             {
               type: "button",
+              title: `${t("Permissions")}…`,
+              visible: can.update,
+              onClick: () => setShowCollectionPermissions(true),
+              icon: <PadlockIcon />,
+            },
+            {
+              type: "button",
               title: `${t("Delete")}…`,
               dangerous: true,
               onClick: () => setShowDeleteModal(true),
@@ -508,6 +524,29 @@ function DocumentMenu({
                 document={document}
                 onSubmit={() => setShowPermanentDeleteModal(false)}
               />
+            </Modal>
+          )}
+          {can.update && (
+            <Modal
+              title={t("Create template")}
+              onRequestClose={() => setShowTemplateModal(false)}
+              isOpen={showTemplateModal}
+              isCentered
+            >
+              <DocumentTemplatizeDialog
+                documentId={document.id}
+                // onSubmit={() => setShowTemplateModal(false)}
+              />
+            </Modal>
+          )}
+          {can.update && (
+            <Modal
+              title={t("Document permissions")}
+              onRequestClose={() => setShowCollectionPermissions(false)}
+              isOpen={showCollectionPermissions}
+            >
+              <DocumentPermissions document={document} />
+              {/* <CollectionPermissions collection={collection} /> */}
             </Modal>
           )}
         </>

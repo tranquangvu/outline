@@ -3,6 +3,8 @@ import presentAuthenticationProvider from "./authenticationProvider";
 import presentCollection from "./collection";
 import presentCollectionGroupMembership from "./collectionGroupMembership";
 import presentDocument from "./document";
+import presentDocumentGroupMembership from "./documentGroupMembership";
+import presentDocumentMembership from "./documentMembership";
 import presentEvent from "./event";
 import presentFileOperation from "./fileOperation";
 import presentGroup from "./group";
@@ -44,4 +46,6 @@ export {
   presentPolicies,
   presentGroupMembership,
   presentCollectionGroupMembership,
+  presentDocumentMembership,
+  presentDocumentGroupMembership,
 };

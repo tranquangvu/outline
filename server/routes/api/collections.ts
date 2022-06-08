@@ -671,7 +671,7 @@ router.post("collections.list", auth(), pagination(), async (ctx) => {
     id: collectionIds,
   };
   const collections = await Collection.scope({
-    method: ["withMembership", user.id],
+    method: ["withDocumentMembership", user.id],
   }).findAll({
     where,
     order: [["updatedAt", "DESC"]],

@@ -114,7 +114,7 @@ export const DOCUMENT_VERSION = 2;
           {
             attributes: ["id", "permission", "sharing", "teamId", "deletedAt"],
             model: Collection.scope({
-              method: ["withMembership", userId],
+              method: ["withDocumentMembership", userId],
             }),
             as: "collection",
             paranoid,
@@ -485,6 +485,7 @@ class Document extends ParanoidModel {
     options: FindOptions<Document> & {
       userId?: string;
       includeState?: boolean;
+      collectionId?: string;
     } = {}
   ): Promise<Document | null> {
     // allow default preloading of collection membership if `userId` is passed in find options
