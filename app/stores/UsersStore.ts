@@ -298,6 +298,22 @@ export default class UsersStore extends BaseStore<User> {
     }
     return queriedUsers(users, query);
   };
+
+  notInDocument = (documentId: string, query = "") => {
+    const memberships = filter(
+      this.rootStore.documentMemberships.orderedData,
+      (member) => member.documentId === documentId
+    );
+    const userIds = memberships.map((member) => member.userId);
+    const users = filter(
+      this.activeOrInvited,
+      (user) => !userIds.includes(user.id)
+    );
+    if (!query) {
+      return users;
+    }
+    return queriedUsers(users, query);
+  };
 }
 
 function queriedUsers(users: User[], query: string) {

@@ -1,4 +1,5 @@
 import Router from "koa-router";
+import { ScopeOptions } from "sequelize";
 import { NotFoundError } from "@server/errors";
 import auth from "@server/middlewares/authentication";
 import { Document, Revision } from "@server/models";
@@ -40,8 +41,19 @@ router.post("revisions.list", auth(), pagination(), async (ctx) => {
   assertPresent(documentId, "documentId is required");
 
   const { user } = ctx.state;
-  const document = await Document.findByPk(documentId, {
-    userId: user.id,
+  const collectionScope: Readonly<ScopeOptions> = {
+    method: ["withCollectionPermissions", user.id],
+  };
+  const documentMembershipsScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
+  const document = await Document.scope([
+    documentMembershipsScope,
+    collectionScope,
+  ]).findOne({
+    where: {
+      id: documentId,
+    },
   });
   authorize(user, "read", document);
 

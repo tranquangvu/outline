@@ -1,5 +1,6 @@
 import invariant from "invariant";
-import { Op } from "sequelize";
+import { Op, ScopeOptions } from "sequelize";
+import isUUID from "validator/lib/isUUID";
 import {
   NotFoundError,
   InvalidRequestError,
@@ -34,7 +35,17 @@ export default async function loadDocument({
     throw AuthenticationError(`Authentication or shareId required`);
   }
 
+  if (id && !isUUID(id)) {
+    throw NotFoundError("Document could not be found for id");
+  }
+
   if (shareId) {
+    const collectionScope: Readonly<ScopeOptions> = {
+      method: ["withCollectionPermissions", user?.id],
+    };
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user?.id],
+    };
     share = await Share.findOne({
       where: {
         revokedAt: {
@@ -45,7 +56,7 @@ export default async function loadDocument({
       include: [
         {
           // unscoping here allows us to return unpublished documents
-          model: Document.unscoped(),
+          model: Document.scope([collectionScope, membershipScope]),
           include: [
             {
               model: User,
@@ -73,49 +84,72 @@ export default async function loadDocument({
     // if the provided share token allows access. This is used by the frontend
     // to navigate nested documents from a single share link.
     if (id) {
-      document = await Document.findByPk(id, {
-        userId: user ? user.id : undefined,
-        paranoid: false,
-      }); // otherwise, if the user has an authenticated session make sure to load
+      // document = await Document.findByPk(id, {
+      //   userId: user ? user.id : undefined,
+      //   paranoid: false,
+      // });
+      document = await Document.scope([
+        collectionScope,
+        membershipScope,
+      ]).findOne({
+        where: {
+          id,
+        },
+        include: [
+          {
+            model: User,
+            as: "createdBy",
+            paranoid: false,
+          },
+          {
+            model: User,
+            as: "updatedBy",
+            paranoid: false,
+          },
+        ],
+      });
+      // otherwise, if the user has an authenticated session make sure to load
       // with their details so that we can return the correct policies, they may
       // be able to edit the shared document
     } else if (user) {
-      document = await Document.findByPk(share.documentId, {
-        userId: user.id,
-        paranoid: false,
-      });
-      // const collectionScope: Readonly<ScopeOptions> = {
-      //   method: ["withCollectionPermissions", user.id],
-      // };
-      // const membershipScope: Readonly<ScopeOptions> = {
-      //   method: ["withMembership", user.id],
-      // };
-      // document = await Document.scope([
-      //   collectionScope,
-      //   membershipScope,
-      // ]).findOne({
-      //   where: {
-      //     id: share.documentId,
-      //   },
-      //   include: [
-      //     {
-      //       model: User,
-      //       as: "createdBy",
-      //       paranoid: false,
-      //     },
-      //     {
-      //       model: User,
-      //       as: "updatedBy",
-      //       paranoid: false,
-      //     },
-      //   ],
+      // document = await Document.findByPk(share.documentId, {
+      //   userId: user.id,
+      //   paranoid: false,
       // });
+      document = await Document.scope([
+        collectionScope,
+        membershipScope,
+      ]).findOne({
+        where: {
+          id: share.documentId,
+        },
+        include: [
+          {
+            model: User,
+            as: "createdBy",
+            paranoid: false,
+          },
+          {
+            model: User,
+            as: "updatedBy",
+            paranoid: false,
+          },
+        ],
+      });
     } else {
       document = share.document;
     }
 
     if (!document) {
       throw NotFoundError("Document could not be found for shareId");
+    }
+
+    if (!document.collection.memberships) {
+      document.collection.memberships = [];
+    }
+
+    if (!document.collection.collectionGroupMemberships) {
+      document.collection.collectionGroupMemberships = [];
     }
 
     // If the user has access to read the document, we can just update
@@ -186,13 +220,54 @@ export default async function loadDocument({
       lastAccessedAt: new Date(),
     });
   } else {
-    document = await Document.findByPk(id as string, {
-      userId: user ? user.id : undefined,
-      paranoid: false,
-    });
+    // document = await Document.findByPk(id as string, {
+    //   userId: user ? user.id : undefined,
+    //   paranoid: false,
+    // });
+
+    const collectionScope: Readonly<ScopeOptions> = {
+      method: ["withCollectionPermissions", user?.id],
+    };
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user?.id],
+    };
+    document = await Document.scope([collectionScope, membershipScope]).findOne(
+      {
+        where: {
+          id,
+        },
+        include: [
+          {
+            model: User,
+            as: "createdBy",
+            paranoid: false,
+          },
+          {
+            model: User,
+            as: "updatedBy",
+            paranoid: false,
+          },
+        ],
+      }
+    );
 
     if (!document) {
       throw NotFoundError();
+    }
+
+    const collectionMembershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user ? user.id : undefined],
+    };
+    collection = await Collection.scope([collectionMembershipScope]).findOne({
+      where: {
+        id: document.collectionId,
+      },
+    });
+
+    if (collection) {
+      document.collection = collection;
+    } else {
+      collection = document.collection;
     }
 
     if (document.deletedAt) {

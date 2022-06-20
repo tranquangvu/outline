@@ -37,49 +37,43 @@ export default class DocumentMembershipsStore extends BaseStore<
     }
   };
 
-  // @action
-  // async create({
-  //   collectionId,
-  //   userId,
-  //   permission,
-  // }: {
-  //   collectionId: string;
-  //   userId: string;
-  //   permission: string;
-  // }) {
-  //   const res = await client.post("/collections.add_user", {
-  //     id: collectionId,
-  //     userId,
-  //     permission,
-  //   });
-  //   invariant(res?.data, "Membership data should be available");
-  //   res.data.users.forEach(this.rootStore.users.add);
+  @action
+  async create({
+    documentId,
+    userId,
+    permission,
+  }: {
+    documentId: string;
+    userId: string;
+    permission: string;
+  }) {
+    const res = await client.post("/documents.add_user", {
+      id: documentId,
+      userId,
+      permission,
+    });
+    invariant(res?.data, "Membership data should be available");
+    res.data.users.forEach(this.rootStore.users.add);
 
-  //   const memberships = res.data.memberships.map(this.add);
-  //   return memberships[0];
-  // }
+    const memberships = res.data.memberships.map(this.add);
+    return memberships[0];
+  }
 
-  // @action
-  // async delete({
-  //   collectionId,
-  //   userId,
-  // }: {
-  //   collectionId: string;
-  //   userId: string;
-  // }) {
-  //   await client.post("/collections.remove_user", {
-  //     id: collectionId,
-  //     userId,
-  //   });
-  //   this.remove(`${userId}-${collectionId}`);
-  // }
+  @action
+  async delete({ documentId, userId }: { documentId: string; userId: string }) {
+    await client.post("/documents.remove_user", {
+      id: documentId,
+      userId,
+    });
+    this.remove(`${userId}-${documentId}`);
+  }
 
-  // @action
-  // removeCollectionMemberships = (collectionId: string) => {
-  //   this.data.forEach((membership, key) => {
-  //     if (key.includes(collectionId)) {
-  //       this.remove(key);
-  //     }
-  //   });
-  // };
+  @action
+  removeCollectionMemberships = (collectionId: string) => {
+    this.data.forEach((membership, key) => {
+      if (key.includes(collectionId)) {
+        this.remove(key);
+      }
+    });
+  };
 }

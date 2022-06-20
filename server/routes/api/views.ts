@@ -1,15 +1,7 @@
 import Router from "koa-router";
 import { ScopeOptions } from "sequelize";
 import auth from "@server/middlewares/authentication";
-import {
-  View,
-  Document,
-  Event,
-  DocumentGroup,
-  DocumentUser,
-  Group,
-  GroupUser,
-} from "@server/models";
+import { View, Document, Event, Collection } from "@server/models";
 import { authorize } from "@server/policies";
 import { presentView } from "@server/presenters";
 import { assertUuid } from "@server/validation";
@@ -21,55 +13,27 @@ router.post("views.list", auth(), async (ctx) => {
   assertUuid(documentId, "documentId is required");
 
   const { user } = ctx.state;
-  const collectionScope: Readonly<ScopeOptions> = {
-    method: ["withCollection", user.id],
-  };
   const viewScope: Readonly<ScopeOptions> = {
     method: ["withViews", user.id],
   };
+  const documentMembershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
   const document = await Document.scope([
     "defaultScope",
-    collectionScope,
     viewScope,
+    documentMembershipScope,
   ]).findOne({
     where: {
       id: documentId,
     },
     include: [
       {
-        model: DocumentUser,
-        as: "documentMemberships",
-        where: {
-          userId: user.id,
-        },
-        required: false,
-      },
-      {
-        model: DocumentGroup,
-        as: "documentGroupMemberships",
-        required: false,
-        separate: true,
-        include: [
-          {
-            model: Group,
-            as: "group",
-            required: true,
-            include: [
-              {
-                model: GroupUser,
-                as: "groupMemberships",
-                required: true,
-                where: {
-                  userId: user.id,
-                },
-              },
-            ],
-          },
-        ],
+        model: Collection.scope([documentMembershipScope]),
+        as: "collection",
       },
     ],
   });
-  console.log(document?.collection.memberships);
   authorize(user, "read", document);
   const views = await View.findByDocument(documentId, { includeSuspended });
 
@@ -79,57 +43,28 @@ router.post("views.list", auth(), async (ctx) => {
 });
 
 router.post("views.create", auth(), async (ctx) => {
-  const { documentId, collectionId } = ctx.body;
+  const { documentId } = ctx.body;
   assertUuid(documentId, "documentId is required");
-  assertUuid(collectionId, "collectionId is required");
 
   const { user } = ctx.state;
-  const collectionScope: Readonly<ScopeOptions> = {
-    method: ["withCollection", user.id],
-  };
   const viewScope: Readonly<ScopeOptions> = {
     method: ["withViews", user.id],
   };
+  const documentMembershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
   const document = await Document.scope([
     "defaultScope",
-    collectionScope,
     viewScope,
+    documentMembershipScope,
   ]).findOne({
     where: {
       id: documentId,
-      collectionId,
     },
     include: [
       {
-        model: DocumentUser,
-        as: "documentMemberships",
-        where: {
-          userId: user.id,
-        },
-        required: false,
-      },
-      {
-        model: DocumentGroup,
-        as: "documentGroupMemberships",
-        required: false,
-        separate: true,
-        include: [
-          {
-            model: Group,
-            as: "group",
-            required: true,
-            include: [
-              {
-                model: GroupUser,
-                as: "groupMemberships",
-                required: true,
-                where: {
-                  userId: user.id,
-                },
-              },
-            ],
-          },
-        ],
+        model: Collection.scope([documentMembershipScope]),
+        as: "collection",
       },
     ],
   });

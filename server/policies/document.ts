@@ -115,11 +115,32 @@ allow(User, "update", Document, (user, document) => {
     return false;
   }
 
-  if (cannot(user, "update", document.collection)) {
-    return false;
+  if (!document.documentMemberships) {
+    document.documentMemberships = [];
+  }
+  invariant(
+    document.documentMemberships,
+    "documentMemberships should be preloaded, did you forget withMembership scope?"
+  );
+
+  const allMemberships = [
+    ...document.documentMemberships,
+    ...document.documentGroupMemberships,
+  ];
+
+  if (allMemberships.length === 0) {
+    if (cannot(user, "update", document.collection)) {
+      return false;
+    } else {
+      return user.teamId === document?.teamId;
+    }
+  } else {
+    return some(allMemberships, (m) =>
+      ["read_write", "maintainer"].includes(m.permission)
+    );
   }
 
-  return user.teamId === document.teamId;
+  // return user.teamId === document?.teamId;
 });
 
 allow(User, "createChildDocument", Document, (user, document) => {
@@ -347,18 +368,4 @@ allow(User, "unpublish", Document, (user, document) => {
     return false;
   }
   return user.teamId === document.teamId;
-});
-
-allow(User, "changePermission", Document, (user, document) => {
-  if (!document) {
-    return false;
-  }
-  if (document.archivedAt) {
-    return false;
-  }
-  if (document.deletedAt) {
-    return false;
-  }
-
-  return user.isAdmin;
 });

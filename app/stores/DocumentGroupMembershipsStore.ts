@@ -41,18 +41,15 @@ export default class DocumentGroupMembershipsStore extends BaseStore<
   @action
   async create({
     documentId,
-    collectionId,
     groupId,
     permission,
   }: {
     documentId: string;
-    collectionId: string;
     groupId: string;
     permission: string;
   }) {
     const res = await client.post("/documents.add_group", {
       id: documentId,
-      collectionId,
       groupId,
       permission,
     });
@@ -64,23 +61,23 @@ export default class DocumentGroupMembershipsStore extends BaseStore<
 
   @action
   async delete({
-    collectionId,
+    documentId,
     groupId,
   }: {
-    collectionId: string;
+    documentId: string;
     groupId: string;
   }) {
-    await client.post("/collections.remove_group", {
-      id: collectionId,
+    await client.post("/documents.remove_group", {
+      id: documentId,
       groupId,
     });
-    this.remove(`${groupId}-${collectionId}`);
+    this.remove(`${groupId}-${documentId}`);
   }
 
   @action
-  removeCollectionMemberships = (collectionId: string) => {
+  removeCollectionMemberships = (documentId: string) => {
     this.data.forEach((membership, key) => {
-      if (key.includes(collectionId)) {
+      if (key.includes(documentId)) {
         this.remove(key);
       }
     });

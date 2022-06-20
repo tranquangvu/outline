@@ -16,6 +16,8 @@ type SaveOptions = {
   done?: boolean;
   autosave?: boolean;
   lastRevision?: number;
+  permission?: string;
+  sharing?: boolean;
 };
 
 export default class Document extends ParanoidModel {

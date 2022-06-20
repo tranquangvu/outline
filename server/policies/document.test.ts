@@ -79,6 +79,8 @@ describe("private collection", () => {
       teamId: team.id,
       collectionId: collection.id,
     });
+    document.documentMemberships = [];
+    document.documentGroupMemberships = [];
     const abilities = serialize(user, document);
     expect(abilities.read).toEqual(false);
     expect(abilities.download).toEqual(false);

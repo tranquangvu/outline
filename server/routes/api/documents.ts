@@ -2,6 +2,7 @@ import fs from "fs-extra";
 import invariant from "invariant";
 import Router from "koa-router";
 import { Op, ScopeOptions, WhereOptions } from "sequelize";
+// import isUUID from "validator/lib/isUUID";
 import { subtractDate } from "@shared/utils/date";
 import documentCreator from "@server/commands/documentCreator";
 import documentImporter from "@server/commands/documentImporter";
@@ -95,7 +96,7 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
     const collection = await Collection.scope({
       method: ["withDocumentMembership", user.id],
     }).findByPk(collectionId);
-    authorize(user, "read_overview", collection);
+    authorize(user, "readOverview", collection);
 
     // index sort is special because it uses the order of the documents in the
     // collection.documentStructure rather than a database column
@@ -357,7 +358,6 @@ router.post("documents.viewed", auth(), pagination(), async (ctx) => {
             as: "documentMemberships",
             where: {
               userId: user.id,
-              // collectionId,
             },
             required: false,
           },
@@ -487,7 +487,6 @@ router.post(
       shareId,
       user,
     });
-
     const isPublic = cannot(user, "read", document);
     const serializedDocument = await presentDocument(document, {
       isPublic,
@@ -946,12 +945,58 @@ router.post("documents.update", auth(), async (ctx) => {
   let collection: Collection | null | undefined;
 
   const document = await sequelize.transaction(async (transaction) => {
-    const document = await Document.findByPk(id, {
-      userId: user.id,
-      includeState: true,
-      transaction,
+    // const document = await Document.findByPk(id, {
+    //   userId: user.id,
+    //   includeState: true,
+    //   transaction,
+    // });
+    // authorize(user, "update", document);
+    const collectionMembership: Readonly<ScopeOptions> = {
+      method: ["withCollectionAndMembership", user.id],
+    };
+    const documentMembershipsScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user.id],
+    };
+    const document = await Document.scope([
+      documentMembershipsScope,
+      collectionMembership,
+    ]).findOne({
+      where: {
+        id,
+      },
+      include: [
+        {
+          model: User,
+          as: "createdBy",
+          paranoid: false,
+        },
+        {
+          model: User,
+          as: "updatedBy",
+          paranoid: false,
+        },
+      ],
     });
     authorize(user, "update", document);
+
+    // Add document membership for creator
+    if (permission !== "read_write" && document.permission === "read_write") {
+      await DocumentUser.findOrCreate({
+        where: {
+          documentId: document.id,
+          userId: user.id,
+          collectionId: document.collectionId,
+        },
+        defaults: {
+          permission: "read_write",
+          createdById: user.id,
+        },
+      });
+    }
+
+    if (lastRevision && lastRevision !== document.revisionCount) {
+      throw InvalidRequestError("Document has changed since last revision");
+    }
 
     collection = document.collection;
 
@@ -978,7 +1023,7 @@ router.post("documents.update", auth(), async (ctx) => {
 
   if (permission) {
     Event.schedule({
-      name: "documents._permission",
+      name: "documents.permission_change",
       documentId: document.id,
       collectionId: document.collectionId,
       teamId: document.teamId,
@@ -1130,8 +1175,19 @@ router.post("documents.delete", auth(), async (ctx) => {
       ip: ctx.request.ip,
     });
   } else {
-    const document = await Document.findByPk(id, {
-      userId: user.id,
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", ctx.state.user.id],
+    };
+    const document = await Document.scope([membershipScope]).findOne({
+      where: {
+        id,
+      },
+      include: [
+        {
+          model: Collection.scope([membershipScope]),
+          as: "collection",
+        },
+      ],
     });
 
     authorize(user, "delete", document);
@@ -1356,6 +1412,8 @@ router.post("documents.create", auth(), async (ctx) => {
   });
 
   document.collection = collection;
+  document.documentMemberships = [];
+  document.documentGroupMemberships = [];
 
   return (ctx.body = {
     data: await presentDocument(document),
@@ -1364,13 +1422,25 @@ router.post("documents.create", auth(), async (ctx) => {
 });
 
 router.post("documents.add_user", auth(), async (ctx) => {
-  const { id, collectionId, userId, permission = "read_write" } = ctx.body;
+  const { id, userId, permission = "read_write" } = ctx.body;
   assertUuid(id, "id is required");
-  assertUuid(collectionId, "collectionId is required");
   assertUuid(userId, "userId is required");
 
-  const document = await Document.findByPk(id);
-  authorize(ctx.state.user, "changePermission", document);
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
 
   const user = await User.findByPk(userId);
   authorize(ctx.state.user, "read", user);
@@ -1378,7 +1448,6 @@ router.post("documents.add_user", auth(), async (ctx) => {
   let membership = await DocumentUser.findOne({
     where: {
       userId,
-      collectionId,
       documentId: id,
     },
   });
@@ -1387,7 +1456,7 @@ router.post("documents.add_user", auth(), async (ctx) => {
     membership = await DocumentUser.create({
       userId,
       permission,
-      collectionId,
+      collectionId: document.collectionId,
       documentId: id,
       createdById: ctx.state.user.id,
     });
@@ -1399,7 +1468,7 @@ router.post("documents.add_user", auth(), async (ctx) => {
   await Event.create({
     name: "documents.add_user",
     userId,
-    collectionId,
+    collectionId: document.collectionId,
     documentId: id,
     teamId: document?.teamId,
     actorId: ctx.state.user.id,
@@ -1418,13 +1487,25 @@ router.post("documents.add_user", auth(), async (ctx) => {
 });
 
 router.post("documents.remove_user", auth(), async (ctx) => {
-  const { id, collectionId, userId } = ctx.body;
+  const { id, userId } = ctx.body;
   assertUuid(id, "id is required");
-  assertUuid(collectionId, "collectionId is required");
   assertUuid(userId, "userId is required");
 
-  const document = await Document.findByPk(id);
-  authorize(ctx.state.user, "changePermission", document);
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
 
   const user = await User.findByPk(userId);
   authorize(ctx.state.user, "read", user);
@@ -1434,7 +1515,7 @@ router.post("documents.remove_user", auth(), async (ctx) => {
   await Event.create({
     name: "documents.remove_user",
     userId,
-    collectionId: collectionId,
+    collectionId: document.collectionId,
     teamId: document.teamId,
     actorId: ctx.state.user.id,
     data: {
@@ -1449,13 +1530,25 @@ router.post("documents.remove_user", auth(), async (ctx) => {
 });
 
 router.post("documents.add_group", auth(), async (ctx) => {
-  const { id, collectionId, groupId, permission = "read_write" } = ctx.body;
+  const { id, groupId, permission = "read_write" } = ctx.body;
   assertUuid(id, "id is required");
   assertUuid(groupId, "groupId is required");
-  assertUuid(collectionId, "collectionId is required");
 
-  const document = await Document.findByPk(id);
-  authorize(ctx.state.user, "changePermission", document);
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
 
   const group = await Group.findByPk(groupId);
   authorize(ctx.state.user, "read", group);
@@ -1463,7 +1556,7 @@ router.post("documents.add_group", auth(), async (ctx) => {
   let membership = await DocumentGroup.findOne({
     where: {
       groupId,
-      collectionId,
+      collectionId: document.collectionId,
       documentId: id,
     },
   });
@@ -1472,7 +1565,7 @@ router.post("documents.add_group", auth(), async (ctx) => {
     membership = await DocumentGroup.create({
       groupId,
       permission,
-      collectionId,
+      collectionId: document.collectionId,
       documentId: id,
       createdById: ctx.state.user.id,
     });
@@ -1483,7 +1576,7 @@ router.post("documents.add_group", auth(), async (ctx) => {
 
   await Event.create({
     name: "documents.add_group",
-    collectionId,
+    collectionId: document.collectionId,
     modelId: groupId,
     teamId: document.teamId,
     actorId: ctx.state.user.id,
@@ -1493,31 +1586,41 @@ router.post("documents.add_group", auth(), async (ctx) => {
     ip: ctx.request.ip,
   });
 
-  // ctx.body = {
-  //   data: {
-  //     collectionGroupMemberships: [
-  //       presentCollectionGroupMembership(membership),
-  //     ],
-  //   },
-  // };
+  ctx.body = {
+    data: {
+      documentGroupMemberships: [presentDocumentGroupMembership(membership)],
+    },
+  };
 });
 
 router.post("documents.remove_group", auth(), async (ctx) => {
-  const { id, collectionId, groupId } = ctx.body;
+  const { id, groupId } = ctx.body;
   assertUuid(id, "id is required");
   assertUuid(groupId, "groupId is required");
-  assertUuid(collectionId, "collectionId is required");
 
-  const document = await Document.findByPk(id);
-  authorize(ctx.state.user, "changePermission", document);
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
 
   const group = await Group.findByPk(groupId);
   authorize(ctx.state.user, "read", group);
 
   await document.$remove("group", group);
   await Event.create({
-    name: "collections.remove_group",
-    collectionId: collectionId,
+    name: "documents.remove_group",
+    collectionId: document.collectionId,
     teamId: document.teamId,
     actorId: ctx.state.user.id,
     modelId: groupId,
@@ -1540,7 +1643,6 @@ router.post("documents.memberships", auth(), pagination(), async (ctx) => {
 
   const document = await Document.findByPk(id, {
     userId: user.id,
-    collectionId,
   });
   authorize(user, "read", document);
 

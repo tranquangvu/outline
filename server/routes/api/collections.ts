@@ -1,7 +1,7 @@
 import fractionalIndex from "fractional-index";
 import invariant from "invariant";
 import Router from "koa-router";
-import { Sequelize, Op, WhereOptions } from "sequelize";
+import { Sequelize, Op, WhereOptions, ScopeOptions } from "sequelize";
 import collectionExporter from "@server/commands/collectionExporter";
 import teamUpdater from "@server/commands/teamUpdater";
 import { sequelize } from "@server/database/sequelize";
@@ -18,6 +18,7 @@ import {
   Group,
   Attachment,
   FileOperation,
+  Document,
 } from "@server/models";
 import {
   FileOperationFormat,
@@ -25,6 +26,7 @@ import {
   FileOperationType,
 } from "@server/models/FileOperation";
 import { authorize } from "@server/policies";
+import { _can as can } from "@server/policies/cancan";
 import {
   presentCollection,
   presentUser,
@@ -690,9 +692,46 @@ router.post("collections.list", auth(), pagination(), async (ctx) => {
     });
   }
 
+  const viewScope: Readonly<ScopeOptions> = {
+    method: ["withViews", user.id],
+  };
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
+
+  const data = collections.map(presentCollection);
+  await Promise.all(
+    data.map(async (collection) => {
+      if (collection.permission !== "read_write" && collection?.documents) {
+        const filterdDocuments = [];
+        for (const document of collection.documents) {
+          const tmpDocument = await Document.scope([
+            viewScope,
+            membershipScope,
+          ]).findOne({
+            where: {
+              id: document.id,
+            },
+            include: [
+              {
+                model: Collection.scope([membershipScope]),
+                as: "collection",
+              },
+            ],
+          });
+          if (can(user, "read", tmpDocument)) {
+            filterdDocuments.push(document);
+          }
+        }
+
+        collection.documents = filterdDocuments;
+      }
+    })
+  );
+
   ctx.body = {
     pagination: ctx.state.pagination,
-    data: collections.map(presentCollection),
+    data,
     policies: presentPolicies(user, collections),
   };
 });

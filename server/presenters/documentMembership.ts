@@ -10,7 +10,7 @@ type Membership = {
 
 export default (membership: DocumentUser): Membership => {
   return {
-    id: `${membership.userId}-${membership.collectionId}-${membership.documentId}`,
+    id: `${membership.userId}-${membership.documentId}`,
     userId: membership.userId,
     collectionId: membership.collectionId,
     documentId: membership.documentId,
