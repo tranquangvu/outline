@@ -109,7 +109,7 @@ export const DOCUMENT_VERSION = 2;
         include: [
           {
             model: Collection.scope({
-              method: ["withDocumentMembership", userId],
+              method: ["withMembership", userId],
             }),
             as: "collection",
             paranoid,
@@ -170,11 +170,10 @@ export const DOCUMENT_VERSION = 2;
       ],
     };
   },
-  withMembership: (userId: string, collectionId: string) => {
-    if (!userId || !collectionId) {
+  withMembership: (userId: string) => {
+    if (!userId) {
       return {};
     }
-
     return {
       include: [
         {
@@ -182,7 +181,6 @@ export const DOCUMENT_VERSION = 2;
           as: "documentMemberships",
           where: {
             userId,
-            collectionId,
           },
           required: false,
         },
@@ -218,9 +216,54 @@ export const DOCUMENT_VERSION = 2;
         {
           model: Collection,
           as: "collection",
-          where: {
-            id: collectionId,
+          // where: {
+          //   // collectionId: {
+          //   //   [Op.eq]: "$document.collectionId$",
+          //   // },
+          //   // id: {
+          //   //   [Op.col]: "document.collectionId",
+          //   // },
+          //   // id: {
+          //   //   [Op.in]: [
+          //   //     Sequelize.literal(`(
+          //   //     SELECT "collection"."id" FROM "collections" AS "collection"
+          //   //     WHERE "collection"."id" = "document"."collectionId"
+          //   //   )`),
+          //   //   ],
+          //   // },
+          //   id: {
+          //     [Op.in]: [
+          //       Sequelize.literal(`(
+          //       SELECT "collection"."id" FROM collection
+          //       WHERE "collection"."id" = "document"."collectionId"
+          //     )`),
+          //     ],
+          //   },
+          // },
+        },
+      ],
+    };
+  },
+  withCollectionAndMembership: (userId: string, paranoid = true) => {
+    if (userId) {
+      return {
+        include: [
+          {
+            model: Collection.scope({
+              method: ["withDocumentMembership", userId],
+            }),
+            as: "collection",
+            paranoid,
           },
+        ],
+      };
+    }
+
+    return {
+      include: [
+        {
+          model: Collection,
+          as: "collection",
         },
       ],
     };
@@ -281,6 +324,10 @@ class Document extends ParanoidModel {
 
   @Column(DataType.ARRAY(DataType.UUID))
   collaboratorIds: string[] = [];
+
+  @IsIn([["read", "read_write"]])
+  @Column
+  permission: "read" | "read_write" | null;
 
   // getters
 
@@ -447,10 +494,6 @@ class Document extends ParanoidModel {
   @HasMany(() => View)
   views: View[];
 
-  @IsIn([["read", "read_write"]])
-  @Column
-  permission: "read" | "read_write" | null;
-
   @HasMany(() => DocumentUser, "documentId")
   documentMemberships: DocumentUser[];
 
@@ -477,7 +520,6 @@ class Document extends ParanoidModel {
     id: string,
     options: FindOptions<Document> & {
       userId?: string;
-      collectionId?: string;
     } = {}
   ) {
     // allow default preloading of collection membership if `userId` is passed in find options
@@ -492,7 +534,7 @@ class Document extends ParanoidModel {
         method: ["withViews", options.userId],
       },
       {
-        method: ["withMembership", options.userId, options.collectionId],
+        method: ["withMembership", options.userId],
       },
     ]);
 

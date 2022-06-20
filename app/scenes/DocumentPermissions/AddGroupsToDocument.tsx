@@ -5,7 +5,7 @@ import * as React from "react";
 import { withTranslation, WithTranslation } from "react-i18next";
 import styled from "styled-components";
 import RootStore from "~/stores/RootStore";
-import Collection from "~/models/Collection";
+import Document from "~/models/Document";
 import Group from "~/models/Group";
 import GroupNew from "~/scenes/GroupNew";
 import Button from "~/components/Button";
@@ -21,7 +21,7 @@ import withStores from "~/components/withStores";
 
 type Props = WithTranslation &
   RootStore & {
-    collection: Collection;
+    document: Document;
     onSubmit: () => void;
   };
 
@@ -56,8 +56,8 @@ class AddGroupsToCollection extends React.Component<Props> {
     const { t } = this.props;
 
     try {
-      this.props.collectionGroupMemberships.create({
-        collectionId: this.props.collection.id,
+      this.props.documentGroupMemberships.create({
+        documentId: this.props.document.id,
         groupId: group.id,
         permission: "read_write",
       });
@@ -78,7 +78,7 @@ class AddGroupsToCollection extends React.Component<Props> {
   };
 
   render() {
-    const { groups, policies, collection, auth, t } = this.props;
+    const { groups, policies, document, auth, t } = this.props;
     const { user, team } = auth;
     if (!user || !team) {
       return null;
@@ -115,7 +115,7 @@ class AddGroupsToCollection extends React.Component<Props> {
               <Empty>{t("No groups left to add")}</Empty>
             )
           }
-          items={groups.notInCollection(collection.id, this.query)}
+          items={groups.notInDocument(document.id, this.query)}
           fetch={this.query ? undefined : groups.fetchPage}
           renderItem={(item: Group) => (
             <GroupListItem

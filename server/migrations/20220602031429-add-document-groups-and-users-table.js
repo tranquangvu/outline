@@ -98,7 +98,7 @@ module.exports = {
     });
     await queryInterface.addColumn("documents", "permission", {
       type: Sequelize.STRING,
-      allowNull: false,
+      allowNull: true,
       validate: {
         isIn: [["read", "read_write", null]],
       },

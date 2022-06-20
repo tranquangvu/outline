@@ -1,5 +1,5 @@
 import Router from "koa-router";
-import { Op, WhereOptions } from "sequelize";
+import { Op, WhereOptions, ScopeOptions } from "sequelize";
 import { NotFoundError } from "@server/errors";
 import auth from "@server/middlewares/authentication";
 import { Document, User, Event, Share, Team, Collection } from "@server/models";
@@ -221,8 +221,19 @@ router.post("shares.create", auth(), async (ctx) => {
   assertPresent(documentId, "documentId is required");
 
   const { user } = ctx.state;
-  const document = await Document.findByPk(documentId, {
-    userId: user.id,
+  const collectionScope: Readonly<ScopeOptions> = {
+    method: ["withCollection", user.id],
+  };
+  const documentMembershipsScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
+  const document = await Document.scope([
+    documentMembershipsScope,
+    collectionScope,
+  ]).findOne({
+    where: {
+      id: documentId,
+    },
   });
 
   // user could be creating the share link to share with team members

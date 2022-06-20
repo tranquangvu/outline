@@ -1,5 +1,13 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`#documents.add_user should require user in team 1`] = `
+Object {
+  "error": "authorization_error",
+  "message": "Authorization error",
+  "ok": false,
+}
+`;
+
 exports[`#documents.create should error with invalid parentDocument 1`] = `
 Object {
   "error": "authorization_error",
@@ -23,6 +31,14 @@ Object {
   "message": "Authentication required",
   "ok": false,
   "status": 401,
+}
+`;
+
+exports[`#documents.remove_group should require group in team 1`] = `
+Object {
+  "error": "authorization_error",
+  "message": "Authorization error",
+  "ok": false,
 }
 `;
 

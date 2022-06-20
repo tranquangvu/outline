@@ -66,7 +66,7 @@ allow(User, ["read", "star", "unstar"], Collection, (user, collection) => {
   return true;
 });
 
-allow(User, "read_overview", Collection, (user, collection) => {
+allow(User, "readOverview", Collection, (user, collection) => {
   if (!collection || user.teamId !== collection.teamId) {
     return false;
   }
@@ -145,6 +145,9 @@ allow(User, ["publish", "update"], Collection, (user, collection) => {
       ...collection.memberships,
       ...collection.collectionGroupMemberships,
     ];
+    // if (allMemberships.length === 0) {
+    //   return collection.teamId === user.teamId;
+    // }
     return some(allMemberships, (m) =>
       ["read_write", "maintainer"].includes(m.permission)
     );

@@ -115,6 +115,48 @@ describe("#collections.list", () => {
     expect(body.policies.length).toEqual(2);
     expect(body.policies[0].abilities.read).toEqual(true);
   });
+
+  it("should return private collections actor is a member of document user", async () => {
+    const user = await buildUser();
+    const anotherUser = await buildUser({
+      teamId: user.teamId,
+    });
+    const collection = await buildCollection({
+      permission: null,
+      teamId: user.teamId,
+      userId: user.id,
+    });
+    const doc = await buildDocument({
+      teamId: user.teamId,
+      permission: null,
+      collectionId: collection.id,
+      userId: user.id,
+      title: "A",
+    });
+    await buildDocument({
+      teamId: user.teamId,
+      collectionId: collection.id,
+      userId: user.id,
+      title: "B",
+    });
+    await doc.$add("user", anotherUser, {
+      through: {
+        permission: "read_write",
+        createdById: user.id,
+        collectionId: collection.id,
+      },
+    });
+
+    const res = await server.post("/api/collections.list", {
+      body: {
+        token: anotherUser.getJwtToken(),
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.policies[0].abilities.read).toEqual(false);
+    expect(body.policies[0].abilities.readOverview).toEqual(true);
+  });
 });
 
 describe("#collections.import", () => {
@@ -399,7 +441,7 @@ describe("#collections.export_all", () => {
 
 describe("#collections.add_user", () => {
   it("should add user to collection", async () => {
-    const user = await buildUser();
+    const { user } = await seed();
     const collection = await buildCollection({
       teamId: user.teamId,
       userId: user.id,

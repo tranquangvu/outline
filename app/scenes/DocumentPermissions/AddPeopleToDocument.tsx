@@ -4,7 +4,7 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import { WithTranslation, withTranslation } from "react-i18next";
 import RootStore from "~/stores/RootStore";
-import Collection from "~/models/Collection";
+import Document from "~/models/Document";
 import User from "~/models/User";
 import Invite from "~/scenes/Invite";
 import ButtonLink from "~/components/ButtonLink";
@@ -19,12 +19,12 @@ import MemberListItem from "./components/MemberListItem";
 
 type Props = WithTranslation &
   RootStore & {
-    collection: Collection;
+    document: Document;
     onSubmit: () => void;
   };
 
 @observer
-class AddPeopleToCollection extends React.Component<Props> {
+class AddPeopleToDocument extends React.Component<Props> {
   @observable
   inviteModalOpen = false;
 
@@ -54,8 +54,8 @@ class AddPeopleToCollection extends React.Component<Props> {
     const { t } = this.props;
 
     try {
-      this.props.memberships.create({
-        collectionId: this.props.collection.id,
+      this.props.documentMemberships.create({
+        documentId: this.props.document.id,
         userId: user.id,
         permission: "read_write",
       });
@@ -75,7 +75,7 @@ class AddPeopleToCollection extends React.Component<Props> {
   };
 
   render() {
-    const { users, collection, auth, t } = this.props;
+    const { users, document, auth, t } = this.props;
     const { user, team } = auth;
     if (!user || !team) {
       return null;
@@ -110,7 +110,7 @@ class AddPeopleToCollection extends React.Component<Props> {
               <Empty>{t("No people left to add")}</Empty>
             )
           }
-          items={users.notInCollection(collection.id, this.query)}
+          items={users.notInDocument(document.id, this.query)}
           fetch={this.query ? undefined : users.fetchPage}
           renderItem={(item: User) => (
             <MemberListItem
@@ -133,4 +133,4 @@ class AddPeopleToCollection extends React.Component<Props> {
   }
 }
 
-export default withTranslation()(withStores(AddPeopleToCollection));
+export default withTranslation()(withStores(AddPeopleToDocument));

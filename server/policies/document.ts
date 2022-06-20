@@ -16,30 +16,31 @@ allow(User, ["read", "download"], Document, (user, document) => {
     return false;
   }
 
-  // invariant(
-  //   document.documentMemberships,
-  //   "documentMemberships should be preloaded, did you forget withMembership scope?"
-  // );
+  if (user.isAdmin) {
+    return true;
+  }
+
+  invariant(
+    document.documentMemberships,
+    "documentMemberships should be preloaded, did you forget withMembership scope?"
+  );
 
   const allMemberships = [
-    ...(document?.documentMemberships || []),
-    ...(document?.documentGroupMemberships || []),
+    ...document.documentMemberships,
+    ...document.documentGroupMemberships,
   ];
 
   if (allMemberships.length === 0) {
-    if (
-      document.collection &&
-      cannot(user, "read_overview", document.collection)
-    ) {
+    if (document.collection && cannot(user, "read", document.collection)) {
       return false;
+    } else {
+      return user.teamId === document?.teamId;
     }
   } else {
     return some(allMemberships, (m) =>
       ["read", "read_write", "maintainer"].includes(m.permission)
     );
   }
-
-  return user.teamId === document.teamId;
 });
 
 allow(User, "star", Document, (user, document) => {
@@ -115,11 +116,32 @@ allow(User, "update", Document, (user, document) => {
     return false;
   }
 
-  if (cannot(user, "update", document.collection)) {
-    return false;
+  if (!document.documentMemberships) {
+    document.documentMemberships = [];
+  }
+  invariant(
+    document.documentMemberships,
+    "documentMemberships should be preloaded, did you forget withMembership scope?"
+  );
+
+  const allMemberships = [
+    ...document.documentMemberships,
+    ...document.documentGroupMemberships,
+  ];
+
+  if (allMemberships.length === 0) {
+    if (cannot(user, "update", document.collection)) {
+      return false;
+    } else {
+      return user.teamId === document?.teamId;
+    }
+  } else {
+    return some(allMemberships, (m) =>
+      ["read_write", "maintainer"].includes(m.permission)
+    );
   }
 
-  return user.teamId === document.teamId;
+  // return user.teamId === document?.teamId;
 });
 
 allow(User, "createChildDocument", Document, (user, document) => {
@@ -360,18 +382,4 @@ allow(User, "unpublish", Document, (user, document) => {
     !hasChild(document.collection.documentStructure || []) &&
     user.teamId === document.teamId
   );
-});
-
-allow(User, "changePermission", Document, (user, document) => {
-  if (!document) {
-    return false;
-  }
-  if (document.archivedAt) {
-    return false;
-  }
-  if (document.deletedAt) {
-    return false;
-  }
-
-  return user.isAdmin;
 });

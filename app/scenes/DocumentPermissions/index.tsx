@@ -3,7 +3,6 @@ import { PlusIcon } from "outline-icons";
 import * as React from "react";
 import { useTranslation, Trans } from "react-i18next";
 import styled from "styled-components";
-// import Collection from "~/models/Collection";
 import Document from "~/models/Document";
 import Group from "~/models/Group";
 import User from "~/models/User";
@@ -12,18 +11,16 @@ import Divider from "~/components/Divider";
 import Flex from "~/components/Flex";
 import InputSelectPermission from "~/components/InputSelectPermission";
 import Labeled from "~/components/Labeled";
-// import Modal from "~/components/Modal";
-// import PaginatedEventList from "~/components/PaginatedEventList";
+import Modal from "~/components/Modal";
 import PaginatedList from "~/components/PaginatedList";
 import Switch from "~/components/Switch";
 import Text from "~/components/Text";
-// import useBoolean from "~/hooks/useBoolean";
+import useBoolean from "~/hooks/useBoolean";
 import useCurrentUser from "~/hooks/useCurrentUser";
 import useStores from "~/hooks/useStores";
-// import useToasts from "~/hooks/useToasts";
-// import AddGroupsToCollection from "./AddGroupsToCollection";
-// import AddPeopleToCollection from "./AddPeopleToCollection";
-
+import useToasts from "~/hooks/useToasts";
+import AddGroupsToDocument from "./AddGroupsToDocument";
+import AddPeopleToDocument from "./AddPeopleToDocument";
 import DocumentGroupMemberListItem from "./components/DocumentGroupMemberListItem";
 import MemberListItem from "./components/MemberListItem";
 
@@ -35,145 +32,141 @@ function DocumentPermissions({ document }: Props) {
   const { t } = useTranslation();
   const user = useCurrentUser();
   const {
-    // memberships,
-    //collectionGroupMemberships,
     users,
     groups,
     auth,
     documentMemberships,
     documentGroupMemberships,
   } = useStores();
-  // const { showToast } = useToasts();
+  const { showToast } = useToasts();
 
-  // const [
-  //   addGroupModalOpen,
-  //   handleAddGroupModalOpen,
-  //   // handleAddGroupModalClose,
-  // ] = useBoolean();
+  const [
+    addGroupModalOpen,
+    handleAddGroupModalOpen,
+    handleAddGroupModalClose,
+  ] = useBoolean();
 
-  // const [
-  //   addMemberModalOpen,
-  //   handleAddMemberModalOpen,
-  //   handleAddMemberModalClose,
-  // ] = useBoolean();
+  const [
+    addMemberModalOpen,
+    handleAddMemberModalOpen,
+    handleAddMemberModalClose,
+  ] = useBoolean();
 
-  // const handleRemoveUser = React.useCallback(
-  //   async (user) => {
-  //     try {
-  //       await documentMembership.delete({
-  //         collectionId: document.collectionId,
-  //         documentId: document.id,
-  //         userId: user.id,
-  //       });
-  //       showToast(
-  //         t(`{{ userName }} was removed from the document`, {
-  //           userName: user.name,
-  //         }),
-  //         {
-  //           type: "success",
-  //         }
-  //       );
-  //     } catch (err) {
-  //       showToast(t("Could not remove user"), {
-  //         type: "error",
-  //       });
-  //     }
-  //   },
-  //   [documentMembership, showToast, document, t]
-  // );
+  const handleRemoveUser = React.useCallback(
+    async (user) => {
+      try {
+        await documentMemberships.delete({
+          documentId: document.id,
+          userId: user.id,
+        });
+        showToast(
+          t(`{{ userName }} was removed from the document`, {
+            userName: user.name,
+          }),
+          {
+            type: "success",
+          }
+        );
+      } catch (err) {
+        showToast(t("Could not remove user"), {
+          type: "error",
+        });
+      }
+    },
+    [documentMemberships, showToast, document, t]
+  );
 
-  // const handleUpdateUser = React.useCallback(
-  //   async (user, permission) => {
-  //     try {
-  //       await documentMembership.create({
-  //         collectionId: document.collectionId,
-  //         documentId: document.id,
-  //         userId: user.id,
-  //         permission,
-  //       });
-  //       showToast(
-  //         t(`{{ userName }} permissions were updated`, {
-  //           userName: user.name,
-  //         }),
-  //         {
-  //           type: "success",
-  //         }
-  //       );
-  //     } catch (err) {
-  //       showToast(t("Could not update user"), {
-  //         type: "error",
-  //       });
-  //     }
-  //   },
-  //   [documentMembership, showToast, document]
-  // );
+  const handleUpdateUser = React.useCallback(
+    async (user, permission) => {
+      try {
+        await documentMemberships.create({
+          documentId: document.id,
+          userId: user.id,
+          permission,
+        });
+        showToast(
+          t(`{{ userName }} permissions were updated`, {
+            userName: user.name,
+          }),
+          {
+            type: "success",
+          }
+        );
+      } catch (err) {
+        showToast(t("Could not update user"), {
+          type: "error",
+        });
+      }
+    },
+    [documentMemberships, showToast, t, document.id]
+  );
 
-  // const handleRemoveGroup = React.useCallback(
-  //   async (group) => {
-  //     try {
-  //       await collectionGroupMemberships.delete({
-  //         collectionId: document.id,
-  //         groupId: group.id,
-  //       });
-  //       showToast(
-  //         t(`The {{ groupName }} group was removed from the collection`, {
-  //           groupName: group.name,
-  //         }),
-  //         {
-  //           type: "success",
-  //         }
-  //       );
-  //     } catch (err) {
-  //       showToast(t("Could not remove group"), {
-  //         type: "error",
-  //       });
-  //     }
-  //   },
-  //   [collectionGroupMemberships, showToast, collection, t]
-  // );
+  const handleRemoveGroup = React.useCallback(
+    async (group) => {
+      try {
+        await documentGroupMemberships.delete({
+          documentId: document.id,
+          groupId: group.id,
+        });
+        showToast(
+          t(`The {{ groupName }} group was removed from the collection`, {
+            groupName: group.name,
+          }),
+          {
+            type: "success",
+          }
+        );
+      } catch (err) {
+        showToast(t("Could not remove group"), {
+          type: "error",
+        });
+      }
+    },
+    [documentGroupMemberships, showToast, document.id, t]
+  );
 
-  // const handleUpdateGroup = React.useCallback(
-  //   async (group, permission) => {
-  //     try {
-  //       await collectionGroupMemberships.create({
-  //         collectionId: collection.id,
-  //         groupId: group.id,
-  //         permission,
-  //       });
-  //       showToast(
-  //         t(`{{ groupName }} permissions were updated`, {
-  //           groupName: group.name,
-  //         }),
-  //         {
-  //           type: "success",
-  //         }
-  //       );
-  //     } catch (err) {
-  //       showToast(t("Could not update user"), {
-  //         type: "error",
-  //       });
-  //     }
-  //   },
-  //   [collectionGroupMemberships, showToast, collection, t]
-  // );
+  const handleUpdateGroup = React.useCallback(
+    async (group, permission) => {
+      try {
+        await documentGroupMemberships.create({
+          documentId: document.id,
+          groupId: group.id,
+          permission,
+        });
+        showToast(
+          t(`{{ groupName }} permissions were updated`, {
+            groupName: group.name,
+          }),
+          {
+            type: "success",
+          }
+        );
+      } catch (err) {
+        showToast(t("Could not update user"), {
+          type: "error",
+        });
+      }
+    },
+    [documentGroupMemberships, showToast, document.id, t]
+  );
 
-  // const handleChangePermission = React.useCallback(
-  //   async (permission: string) => {
-  //     try {
-  //       await collection.save({
-  //         permission,
-  //       });
-  //       showToast(t("Default access permissions were updated"), {
-  //         type: "success",
-  //       });
-  //     } catch (err) {
-  //       showToast(t("Could not update permissions"), {
-  //         type: "error",
-  //       });
-  //     }
-  //   },
-  //   [collection, showToast, t]
-  // );
+  const handleChangePermission = React.useCallback(
+    async (permission: string) => {
+      try {
+        await document.save({
+          permission,
+        });
+        showToast(t("Default access permissions were updated"), {
+          type: "success",
+        });
+      } catch (err) {
+        showToast(t("Could not update permissions"), {
+          type: "error",
+        });
+      }
+    },
+    [document, showToast, t]
+  );
 
   const fetchOptions = React.useMemo(
     () => ({
@@ -183,23 +176,23 @@ function DocumentPermissions({ document }: Props) {
     [document.id, document.collectionId]
   );
 
-  // const handleSharingChange = React.useCallback(
-  //   async (ev: React.ChangeEvent<HTMLInputElement>) => {
-  //     try {
-  //       await collection.save({
-  //         sharing: ev.target.checked,
-  //       });
-  //       showToast(t("Public document sharing permissions were updated"), {
-  //         type: "success",
-  //       });
-  //     } catch (err) {
-  //       showToast(t("Could not update public document sharing"), {
-  //         type: "error",
-  //       });
-  //     }
-  //   },
-  //   [collection, showToast, t]
-  // );
+  const handleSharingChange = React.useCallback(
+    async (ev: React.ChangeEvent<HTMLInputElement>) => {
+      try {
+        await document.save({
+          sharing: ev.target.checked,
+        });
+        showToast(t("Public document sharing permissions were updated"), {
+          type: "success",
+        });
+      } catch (err) {
+        showToast(t("Could not update public document sharing"), {
+          type: "error",
+        });
+      }
+    },
+    [document, showToast, t]
+  );
 
   const documentName = document.name;
   const documentGroups = groups.inDocument(document.id, document.collectionId);
@@ -211,14 +204,14 @@ function DocumentPermissions({ document }: Props) {
   return (
     <Flex column>
       <InputSelectPermission
-        onChange={() => console.log("InputSelectPermission")}
+        onChange={handleChangePermission}
         value={document.permission || ""}
         nude
       />
       <PermissionExplainer size="small">
         {!document.permission && (
           <Trans
-            defaults="The <em>{{ documentName }}</em> collection is private. Team members have no access to it by default."
+            defaults="The <em>{{ documentName }}</em> document is private. Team members have no access to it by default."
             values={{
               documentName,
             }}
@@ -254,7 +247,7 @@ function DocumentPermissions({ document }: Props) {
       <Switch
         id="sharing"
         label={t("Public document sharing")}
-        onChange={() => console.log("handleSharingChange")}
+        onChange={handleSharingChange}
         checked={sharing && teamSharingEnabled}
         disabled={!teamSharingEnabled}
         note={
@@ -274,7 +267,7 @@ function DocumentPermissions({ document }: Props) {
         <Actions gap={8}>
           <Button
             type="button"
-            onClick={() => console.log("handleAddGroupModalOpen")}
+            onClick={handleAddGroupModalOpen}
             icon={<PlusIcon />}
             neutral
           >
@@ -282,7 +275,7 @@ function DocumentPermissions({ document }: Props) {
           </Button>
           <Button
             type="button"
-            onClick={() => console.log("handleAddMemberModalOpen")}
+            onClick={handleAddMemberModalOpen}
             icon={<PlusIcon />}
             neutral
           >
@@ -307,12 +300,10 @@ function DocumentPermissions({ document }: Props) {
             key={group.id}
             group={group}
             documentGroupMembership={documentGroupMemberships.get(
-              `${group.id}-${document.collectionId}-${document.id}`
+              `${group.id}-${document.id}`
             )}
-            onRemove={() => console.log("handleRemoveGroup(group)")}
-            onUpdate={() =>
-              console.log("handleUpdateGroup(group, permission))")
-            }
+            onRemove={() => handleRemoveGroup(group)}
+            onUpdate={(permission) => handleUpdateGroup(group, permission)}
           />
         )}
       />
@@ -326,39 +317,37 @@ function DocumentPermissions({ document }: Props) {
           <MemberListItem
             key={item.id}
             user={item}
-            membership={documentMemberships.get(
-              `${item.id}-${document.collectionId}-${document.id}`
-            )}
+            membership={documentMemberships.get(`${item.id}-${document.id}`)}
             canEdit={item.id !== user.id}
-            onRemove={() => console.log("handleRemoveUser(item)")}
-            onUpdate={() => console.log("handleUpdateUser(item, permission)")}
+            onRemove={() => handleRemoveUser(item)}
+            onUpdate={(permission) => handleUpdateUser(item, permission)}
           />
         )}
       />
-      {/* <Modal
-        title={t(`Add groups to {{ collectionName }}`, {
-          collectionName: collection.name,
+      <Modal
+        title={t(`Add groups to {{ documentName }}`, {
+          documentName: document.name,
         })}
         onRequestClose={handleAddGroupModalClose}
         isOpen={addGroupModalOpen}
       >
-        <AddGroupsToCollection
-          collection={collection}
+        <AddGroupsToDocument
+          document={document}
           onSubmit={handleAddGroupModalClose}
         />
-      </Modal> */}
-      {/* <Modal
-        title={t(`Add people to {{ collectionName }}`, {
-          collectionName: collection.name,
+      </Modal>
+      <Modal
+        title={t(`Add people to {{ documentName }}`, {
+          document: document.name,
         })}
         onRequestClose={handleAddMemberModalClose}
         isOpen={addMemberModalOpen}
       >
-        <AddPeopleToCollection
-          collection={collection}
+        <AddPeopleToDocument
+          document={document}
           onSubmit={handleAddMemberModalClose}
         />
-      </Modal> */}
+      </Modal>
     </Flex>
   );
 }
