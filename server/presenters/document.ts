@@ -65,6 +65,7 @@ export default async function present(
     collectionId: undefined,
     parentDocumentId: undefined,
     lastViewedAt: undefined,
+    permission: document.permission,
   };
 
   if (!!document.views && document.views.length > 0) {

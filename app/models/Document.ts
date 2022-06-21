@@ -393,6 +393,8 @@ export default class Document extends ParanoidModel {
           publish: options?.publish,
           done: options?.done,
           autosave: options?.autosave,
+          permission: options?.permission,
+          sharing: options?.sharing,
         }
       );
     } finally {
