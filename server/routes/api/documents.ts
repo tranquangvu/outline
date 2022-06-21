@@ -452,9 +452,13 @@ router.post("documents.drafts", auth(), pagination(), async (ctx) => {
   const collectionScope: Readonly<ScopeOptions> = {
     method: ["withCollectionPermissions", user.id],
   };
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
   const documents = await Document.scope([
     "defaultScope",
     collectionScope,
+    membershipScope,
   ]).findAll({
     where,
     order: [[sort, direction]],

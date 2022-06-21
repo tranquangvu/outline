@@ -649,6 +649,8 @@ export default class DocumentsStore extends BaseStore<Document> {
       done?: boolean;
       autosave?: boolean;
       lastRevision: number;
+      permission?: string;
+      sharing?: boolean;
     }
   ) {
     const document = await super.update(params, options);

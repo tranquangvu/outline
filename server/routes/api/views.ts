@@ -20,7 +20,6 @@ router.post("views.list", auth(), async (ctx) => {
     method: ["withMembership", user.id],
   };
   const document = await Document.scope([
-    "defaultScope",
     viewScope,
     documentMembershipScope,
   ]).findOne({
@@ -54,7 +53,6 @@ router.post("views.create", auth(), async (ctx) => {
     method: ["withMembership", user.id],
   };
   const document = await Document.scope([
-    "defaultScope",
     viewScope,
     documentMembershipScope,
   ]).findOne({

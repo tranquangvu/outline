@@ -87,7 +87,7 @@ function SidebarLink(
         $disabled={disabled}
         activeStyle={isActiveDrop ? activeDropStyle : activeStyle}
         style={active ? activeStyle : style}
-        // onClick={onClick}
+        onClick={onClick}
         onMouseEnter={onMouseEnter}
         // @ts-expect-error exact does not exist on div
         exact={exact !== false}
