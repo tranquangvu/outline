@@ -2,7 +2,6 @@ import fs from "fs-extra";
 import invariant from "invariant";
 import Router from "koa-router";
 import { Op, ScopeOptions, WhereOptions } from "sequelize";
-// import isUUID from "validator/lib/isUUID";
 import { subtractDate } from "@shared/utils/date";
 import documentCreator from "@server/commands/documentCreator";
 import documentImporter from "@server/commands/documentImporter";
