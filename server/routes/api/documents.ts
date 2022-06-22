@@ -95,7 +95,7 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
     const collection = await Collection.scope({
       method: ["withDocumentMembership", user.id],
     }).findByPk(collectionId);
-    authorize(user, "readOverview", collection);
+    authorize(user, "read", collection);
 
     // index sort is special because it uses the order of the documents in the
     // collection.documentStructure rather than a database column
@@ -146,55 +146,23 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
 
   assertSort(sort, Document);
 
-  const collectionScope: Readonly<ScopeOptions> = {
-    method: ["withCollection", user.id],
-  };
   const viewScope: Readonly<ScopeOptions> = {
     method: ["withViews", user.id],
   };
-  // const membershipScope: Readonly<ScopeOptions> = {
-  //   method: ["withMembership", user.id, collectionId],
-  // };
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id, collectionId],
+  };
 
   const documents = await Document.scope([
     "defaultScope",
-    collectionScope,
     viewScope,
-    // membershipScope,
+    membershipScope,
   ]).findAll({
     where,
     include: [
       {
-        model: DocumentUser,
-        as: "documentMemberships",
-        where: {
-          userId: user.id,
-          // collectionId,
-        },
-        required: false,
-      },
-      {
-        model: DocumentGroup,
-        as: "documentGroupMemberships",
-        required: false,
-        separate: true,
-        include: [
-          {
-            model: Group,
-            as: "group",
-            required: true,
-            include: [
-              {
-                model: GroupUser,
-                as: "groupMemberships",
-                required: true,
-                where: {
-                  userId: user.id,
-                },
-              },
-            ],
-          },
-        ],
+        model: Collection.scope([membershipScope]),
+        as: "collection",
       },
     ],
     order: [[sort, direction]],
@@ -210,11 +178,18 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
     );
   }
 
+  const filteredDocumentsWithPermission = documents.filter((document) => {
+    if (can(user, "read", document)) {
+      return document;
+    }
+    return null;
+  });
+
   const data = await Promise.all(
-    documents.map((document) => presentDocument(document))
+    filteredDocumentsWithPermission.map((document) => presentDocument(document))
   );
 
-  const policies = presentPolicies(user, documents);
+  const policies = presentPolicies(user, filteredDocumentsWithPermission);
 
   ctx.body = {
     pagination: ctx.state.pagination,
@@ -1911,8 +1886,19 @@ router.post("documents.memberships", auth(), pagination(), async (ctx) => {
   assertUuid(collectionId, "collectionId is required");
   const { user } = ctx.state;
 
-  const document = await Document.findByPk(id, {
-    userId: user.id,
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
   });
   authorize(user, "read", document);
 
@@ -1968,43 +1954,17 @@ router.post(
     assertUuid(id, "id is required");
     const { user } = ctx.state;
 
-    const document = await Document.findOne({
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", ctx.state.user.id],
+    };
+    const document = await Document.scope([membershipScope]).findOne({
       where: {
         id,
       },
       include: [
         {
-          model: DocumentUser,
-          as: "documentMemberships",
-          where: {
-            userId: user?.id,
-            documentId: id,
-            collectionId,
-          },
-          required: false,
-        },
-        {
-          model: DocumentGroup,
-          as: "documentGroupMemberships",
-          required: false,
-          separate: true,
-          include: [
-            {
-              model: Group,
-              as: "group",
-              required: true,
-              include: [
-                {
-                  model: GroupUser,
-                  as: "groupMemberships",
-                  required: true,
-                  where: {
-                    userId: user?.id,
-                  },
-                },
-              ],
-            },
-          ],
+          model: Collection.scope([membershipScope]),
+          as: "collection",
         },
       ],
     });

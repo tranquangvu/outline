@@ -1,3 +1,4 @@
+import { ScopeOptions } from "sequelize";
 import {
   ForeignKey,
   BelongsTo,
@@ -31,10 +32,13 @@ import Fix from "./decorators/Fix";
 }))
 @Scopes(() => ({
   withCollection: (userId: string) => {
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", userId],
+    };
     return {
       include: [
         {
-          model: Document.scope("withDrafts"),
+          model: Document.scope(["withDrafts", membershipScope]),
           paranoid: true,
           as: "document",
           include: [
