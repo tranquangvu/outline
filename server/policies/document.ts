@@ -92,6 +92,22 @@ allow(User, "share", Document, (user, document) => {
   if (document.deletedAt) {
     return false;
   }
+
+  invariant(
+    document.documentMemberships,
+    "documentMembership should be preloaded, did you forget withMembership scope?"
+  );
+  const allMemberships = [
+    ...document.documentMemberships,
+    ...document.documentGroupMemberships,
+  ];
+
+  if (allMemberships.length) {
+    return some(allMemberships, (m) =>
+      ["read_write", "maintainer"].includes(m.permission)
+    );
+  }
+
   invariant(
     document.collection,
     "collection is missing, did you forget to include in the query scope?"
