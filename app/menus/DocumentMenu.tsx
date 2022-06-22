@@ -9,7 +9,6 @@ import {
   MoveIcon,
   HistoryIcon,
   UnpublishIcon,
-  ShapesIcon,
   PrintIcon,
   ImportIcon,
   NewDocumentIcon,
@@ -32,12 +31,12 @@ import DocumentDelete from "~/scenes/DocumentDelete";
 import DocumentMove from "~/scenes/DocumentMove";
 import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";
 import DocumentPermissions from "~/scenes/DocumentPermissions";
-import DocumentTemplatize from "~/scenes/DocumentTemplatize";
 import CollectionIcon from "~/components/CollectionIcon";
 import ContextMenu from "~/components/ContextMenu";
 import OverflowMenuButton from "~/components/ContextMenu/OverflowMenuButton";
 import Separator from "~/components/ContextMenu/Separator";
 import Template from "~/components/ContextMenu/Template";
+import DocumentTemplatizeDialog from "~/components/DocumentTemplatizeDialog";
 import Flex from "~/components/Flex";
 import Modal from "~/components/Modal";
 import Switch from "~/components/Switch";
@@ -332,13 +331,13 @@ function DocumentMenu({
         onClick: handleImportDocument,
         icon: <ImportIcon />,
       },
-      {
-        type: "button",
-        title: `${t("Create template")}…`,
-        onClick: () => setShowTemplateModal(true),
-        visible: !!can.update && !document.isTemplate && !document.isDraft,
-        icon: <ShapesIcon />,
-      },
+      // {
+      //   type: "button",
+      //   title: `${t("Create template")}…`,
+      //   onClick: () => setShowTemplateModal(true),
+      //   visible: !!can.update && !document.isTemplate && !document.isDraft,
+      //   icon: <ShapesIcon />,
+      // },
       {
         type: "button",
         title: t("Duplicate"),
@@ -571,9 +570,9 @@ function DocumentMenu({
               isOpen={showTemplateModal}
               isCentered
             >
-              <DocumentTemplatize
+              <DocumentTemplatizeDialog
                 documentId={document.id}
-                onSubmit={() => setShowTemplateModal(false)}
+                // onSubmit={() => setShowTemplateModal(false)}
               />
             </Modal>
           )}

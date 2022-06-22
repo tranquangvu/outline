@@ -1,3 +1,4 @@
+import type { SaveOptions } from "sequelize";
 import {
   ForeignKey,
   AfterSave,
@@ -14,12 +15,12 @@ import Collection from "./Collection";
 import Document from "./Document";
 import Team from "./Team";
 import User from "./User";
-import BaseModel from "./base/BaseModel";
+import IdModel from "./base/IdModel";
 import Fix from "./decorators/Fix";
 
 @Table({ tableName: "events", modelName: "event" })
 @Fix
-class Event extends BaseModel {
+class Event extends IdModel {
   @IsUUID(4)
   @Column(DataType.UUID)
   modelId: string;
@@ -45,8 +46,12 @@ class Event extends BaseModel {
   }
 
   @AfterSave
-  static async enqueue(model: Event) {
-    globalEventQueue.add(model);
+  static async enqueue(model: Event, options: SaveOptions<Event>) {
+    if (options.transaction) {
+      options.transaction.afterCommit(() => void globalEventQueue.add(model));
+      return;
+    }
+    void globalEventQueue.add(model);
   }
 
   // associations
@@ -86,8 +91,10 @@ class Event extends BaseModel {
   @Column(DataType.UUID)
   teamId: string;
 
-  // Schedule can be used to send events into the event system without recording
-  // them in the database or audit trail – consider using a task instead.
+  /*
+   * Schedule can be used to send events into the event system without recording
+   * them in the database or audit trail – consider using a task instead.
+   */
   static schedule(event: Partial<Event>) {
     const now = new Date();
     globalEventQueue.add(
@@ -105,6 +112,7 @@ class Event extends BaseModel {
     "collections.move",
     "collections.permission_changed",
     "documents.publish",
+    "documents.unpublish",
     "documents.archive",
     "documents.unarchive",
     "documents.move",
@@ -152,6 +160,7 @@ class Event extends BaseModel {
     "users.create",
     "users.update",
     "users.signin",
+    "users.signout",
     "users.promote",
     "users.demote",
     "users.invite",

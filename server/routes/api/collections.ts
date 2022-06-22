@@ -4,8 +4,10 @@ import Router from "koa-router";
 import { Sequelize, Op, WhereOptions, ScopeOptions } from "sequelize";
 import collectionExporter from "@server/commands/collectionExporter";
 import teamUpdater from "@server/commands/teamUpdater";
+import { sequelize } from "@server/database/sequelize";
 import { ValidationError } from "@server/errors";
 import auth from "@server/middlewares/authentication";
+
 import {
   Collection,
   CollectionUser,
@@ -16,7 +18,13 @@ import {
   Group,
   Attachment,
   Document,
+  FileOperation,
 } from "@server/models";
+import {
+  FileOperationFormat,
+  FileOperationState,
+  FileOperationType,
+} from "@server/models/FileOperation";
 import { authorize } from "@server/policies";
 import { _can as can } from "@server/policies/cancan";
 import {
@@ -136,22 +144,47 @@ router.post("collections.info", auth(), async (ctx) => {
 });
 
 router.post("collections.import", auth(), async (ctx) => {
-  const { type, attachmentId } = ctx.body;
-  assertIn(type, ["outline"], "type must be one of 'outline'");
+  const { attachmentId, format = FileOperationFormat.MarkdownZip } = ctx.body;
   assertUuid(attachmentId, "attachmentId is required");
+
   const { user } = ctx.state;
   authorize(user, "importCollection", user.team);
+
   const attachment = await Attachment.findByPk(attachmentId);
   authorize(user, "read", attachment);
-  await Event.create({
-    name: "collections.import",
-    modelId: attachmentId,
-    teamId: user.teamId,
-    actorId: user.id,
-    data: {
-      type,
-    },
-    ip: ctx.request.ip,
+
+  assertIn(format, Object.values(FileOperationFormat), "Invalid format");
+
+  await sequelize.transaction(async (transaction) => {
+    const fileOperation = await FileOperation.create(
+      {
+        type: FileOperationType.Import,
+        state: FileOperationState.Creating,
+        format,
+        size: attachment.size,
+        key: attachment.key,
+        userId: user.id,
+        teamId: user.teamId,
+      },
+      {
+        transaction,
+      }
+    );
+
+    await Event.create(
+      {
+        name: "fileOperations.create",
+        teamId: user.teamId,
+        actorId: user.id,
+        modelId: fileOperation.id,
+        data: {
+          type: FileOperationType.Import,
+        },
+      },
+      {
+        transaction,
+      }
+    );
   });
 
   ctx.body = {
@@ -464,11 +497,14 @@ router.post("collections.export", auth(), async (ctx) => {
   }).findByPk(id);
   authorize(user, "read", collection);
 
-  const fileOperation = await collectionExporter({
-    collection,
-    user,
-    team,
-    ip: ctx.request.ip,
+  const fileOperation = await sequelize.transaction(async (transaction) => {
+    return collectionExporter({
+      collection,
+      user,
+      team,
+      ip: ctx.request.ip,
+      transaction,
+    });
   });
 
   ctx.body = {
@@ -484,10 +520,13 @@ router.post("collections.export_all", auth(), async (ctx) => {
   const team = await Team.findByPk(user.teamId);
   authorize(user, "export", team);
 
-  const fileOperation = await collectionExporter({
-    user,
-    team,
-    ip: ctx.request.ip,
+  const fileOperation = await sequelize.transaction(async (transaction) => {
+    return collectionExporter({
+      user,
+      team,
+      ip: ctx.request.ip,
+      transaction,
+    });
   });
 
   ctx.body = {
@@ -605,6 +644,7 @@ router.post("collections.update", auth(), async (ctx) => {
   if (privacyChanged || sharingChanged) {
     await collection.reload();
     const team = await Team.findByPk(user.teamId);
+    invariant(team, "team not found");
 
     if (
       collection.permission === null &&

@@ -15,7 +15,9 @@ import ScrollToTop from "~/components/ScrollToTop";
 import Theme from "~/components/Theme";
 import Toasts from "~/components/Toasts";
 import env from "~/env";
+import LazyPolyfill from "./components/LazyPolyfills";
 import Routes from "./routes";
+import Logger from "./utils/Logger";
 import history from "./utils/history";
 import { initSentry } from "./utils/sentry";
 
@@ -40,10 +42,14 @@ if ("serviceWorker" in window.navigator) {
     if (maybePromise?.then) {
       maybePromise
         .then((registration) => {
-          console.log("SW registered: ", registration);
+          Logger.debug("lifecycle", "SW registered: ", registration);
         })
         .catch((registrationError) => {
-          console.log("SW registration failed: ", registrationError);
+          Logger.debug(
+            "lifecycle",
+            "SW registration failed: ",
+            registrationError
+          );
         });
     }
   });
@@ -70,18 +76,20 @@ if (element) {
           <Theme>
             <ErrorBoundary>
               <KBarProvider actions={[]} options={commandBarOptions}>
-                <LazyMotion features={loadFeatures}>
-                  <Router history={history}>
-                    <>
-                      <PageTheme />
-                      <ScrollToTop>
-                        <Routes />
-                      </ScrollToTop>
-                      <Toasts />
-                      <Dialogs />
-                    </>
-                  </Router>
-                </LazyMotion>
+                <LazyPolyfill>
+                  <LazyMotion features={loadFeatures}>
+                    <Router history={history}>
+                      <>
+                        <PageTheme />
+                        <ScrollToTop>
+                          <Routes />
+                        </ScrollToTop>
+                        <Toasts />
+                        <Dialogs />
+                      </>
+                    </Router>
+                  </LazyMotion>
+                </LazyPolyfill>
               </KBarProvider>
             </ErrorBoundary>
           </Theme>

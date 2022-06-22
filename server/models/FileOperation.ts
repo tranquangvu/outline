@@ -7,12 +7,30 @@ import {
   Table,
   DataType,
 } from "sequelize-typescript";
-import { deleteFromS3 } from "@server/utils/s3";
+import { deleteFromS3, getFileByKey } from "@server/utils/s3";
 import Collection from "./Collection";
 import Team from "./Team";
 import User from "./User";
-import BaseModel from "./base/BaseModel";
+import IdModel from "./base/IdModel";
 import Fix from "./decorators/Fix";
+
+export enum FileOperationType {
+  Import = "import",
+  Export = "export",
+}
+
+export enum FileOperationFormat {
+  MarkdownZip = "outline-markdown",
+  Notion = "notion",
+}
+
+export enum FileOperationState {
+  Creating = "creating",
+  Uploading = "uploading",
+  Complete = "complete",
+  Error = "error",
+  Expired = "expired",
+}
 
 @DefaultScope(() => ({
   include: [
@@ -30,14 +48,17 @@ import Fix from "./decorators/Fix";
 }))
 @Table({ tableName: "file_operations", modelName: "file_operation" })
 @Fix
-class FileOperation extends BaseModel {
+class FileOperation extends IdModel {
   @Column(DataType.ENUM("import", "export"))
-  type: "import" | "export";
+  type: FileOperationType;
+
+  @Column(DataType.STRING)
+  format: FileOperationFormat;
 
   @Column(
     DataType.ENUM("creating", "uploading", "complete", "error", "expired")
   )
-  state: "creating" | "uploading" | "complete" | "error" | "expired";
+  state: FileOperationState;
 
   @Column
   key: string;
@@ -56,6 +77,10 @@ class FileOperation extends BaseModel {
     await deleteFromS3(this.key);
     await this.save();
   };
+
+  get buffer() {
+    return getFileByKey(this.key);
+  }
 
   // hooks
 

@@ -25,7 +25,6 @@ import Fix from "./decorators/Fix";
       required: false,
     },
   ],
-  order: [["name", "ASC"]],
 }))
 @Table({
   tableName: "groups",

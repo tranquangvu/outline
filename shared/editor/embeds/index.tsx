@@ -34,7 +34,9 @@ import ModeAnalytics from "./ModeAnalytics";
 import Otter from "./Otter";
 import Pitch from "./Pitch";
 import Prezi from "./Prezi";
+import Scribe from "./Scribe";
 import Spotify from "./Spotify";
+import Tldraw from "./Tldraw";
 import Trello from "./Trello";
 import Typeform from "./Typeform";
 import Vimeo from "./Vimeo";
@@ -69,6 +71,9 @@ function matcher(Component: React.ComponentType<EmbedProps>) {
 }
 
 const Img = styled(Image)`
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #fff;
   margin: 4px;
   width: 18px;
   height: 18px;
@@ -311,11 +316,25 @@ const embeds: EmbedDescriptor[] = [
     matcher: matcher(Prezi),
   },
   {
+    title: "Scribe",
+    keywords: "screencast",
+    icon: () => <Img src="/images/scribe.png" alt="Scribe" />,
+    component: Scribe,
+    matcher: matcher(Scribe),
+  },
+  {
     title: "Spotify",
     keywords: "music",
     icon: () => <Img src="/images/spotify.png" alt="Spotify" />,
     component: Spotify,
     matcher: matcher(Spotify),
+  },
+  {
+    title: "Tldraw",
+    keywords: "draw schematics diagrams",
+    icon: () => <Img src="/images/tldraw.png" alt="Tldraw" />,
+    component: Tldraw,
+    matcher: matcher(Tldraw),
   },
   {
     title: "Trello",
