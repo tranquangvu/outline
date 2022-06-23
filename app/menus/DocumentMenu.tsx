@@ -26,7 +26,6 @@ import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
 import getDataTransferFiles from "@shared/utils/getDataTransferFiles";
 import Document from "~/models/Document";
-// import CollectionPermissions from "~/scenes/CollectionPermissions";
 import DocumentDelete from "~/scenes/DocumentDelete";
 import DocumentMove from "~/scenes/DocumentMove";
 import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";

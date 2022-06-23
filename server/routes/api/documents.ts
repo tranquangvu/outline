@@ -163,6 +163,12 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
     collectionScope,
   ]).findAll({
     where,
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
     order: [[sort, direction]],
     offset: ctx.state.pagination.offset,
     limit: ctx.state.pagination.limit,
