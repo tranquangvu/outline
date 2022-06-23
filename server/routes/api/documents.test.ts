@@ -21,6 +21,7 @@ import {
   buildAdmin,
 } from "@server/test/factories";
 import { flushdb, seed } from "@server/test/support";
+import slugify from "@server/utils/slugify";
 
 const app = webService();
 const server = new TestServer(app.callback());
@@ -623,6 +624,87 @@ describe("#documents.info", () => {
     expect(res.status).toEqual(200);
     expect(body.data.id).toEqual(doc.id);
     expect(body.policies[0].abilities.update).toEqual(true);
+  });
+
+  it("should not return document from urlId without document membership", async () => {
+    const { user, document, collection } = await seed();
+    collection.permission = null;
+    await collection.save();
+    document.permission = null;
+    await document.save();
+
+    const res = await server.post("/api/documents.info", {
+      body: {
+        token: user.getJwtToken(),
+        id: `${slugify(document.title)}-${document.urlId}`,
+      },
+    });
+    expect(res.status).toEqual(403);
+  });
+
+  it("should return document from urlId with document membership", async () => {
+    const { user, document, collection, admin } = await seed();
+    collection.permission = null;
+    await collection.save();
+    document.permission = null;
+    await document.save();
+
+    await DocumentUser.create({
+      userId: user.id,
+      collectionId: collection.id,
+      createdById: admin.id,
+      documentId: document.id,
+    });
+
+    const res = await server.post("/api/documents.info", {
+      body: {
+        token: user.getJwtToken(),
+        id: `${slugify(document.title)}-${document.urlId}`,
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.id).toEqual(document.id);
+  });
+
+  it("should return document from urlId with document group membership", async () => {
+    const { user, document, collection, admin } = await seed();
+    collection.permission = null;
+    await collection.save();
+    document.permission = null;
+    await document.save();
+    const group = await buildGroup({
+      teamId: admin.teamId,
+    });
+    await group.$add("user", user, {
+      through: {
+        createdById: admin.id,
+      },
+    });
+    await document.$add("group", group, {
+      through: {
+        permission: "read_write",
+        createdById: admin.id,
+        collectionId: collection.id,
+      },
+    });
+
+    await DocumentUser.create({
+      userId: user.id,
+      collectionId: collection.id,
+      createdById: admin.id,
+      documentId: document.id,
+    });
+
+    const res = await server.post("/api/documents.info", {
+      body: {
+        token: user.getJwtToken(),
+        id: `${slugify(document.title)}-${document.urlId}`,
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.id).toEqual(document.id);
   });
 });
 
