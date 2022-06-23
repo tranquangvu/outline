@@ -29,6 +29,8 @@ import {
   AfterCreate,
   Scopes,
   DataType,
+  BelongsToMany,
+  IsIn,
 } from "sequelize-typescript";
 import MarkdownSerializer from "slate-md-serializer";
 import isUUID from "validator/lib/isUUID";
@@ -43,6 +45,10 @@ import { parser } from "@server/editor";
 import slugify from "@server/utils/slugify";
 import Backlink from "./Backlink";
 import Collection from "./Collection";
+import DocumentGroup from "./DocumentGroup";
+import DocumentUser from "./DocumentUser";
+import Group from "./Group";
+import GroupUser from "./GroupUser";
 import Revision from "./Revision";
 import Share from "./Share";
 import Star from "./Star";
@@ -179,6 +185,104 @@ export const DOCUMENT_VERSION = 2;
       ],
     };
   },
+  withMembership: (userId: string) => {
+    if (!userId) {
+      return {};
+    }
+    return {
+      include: [
+        {
+          model: DocumentUser,
+          as: "documentMemberships",
+          where: {
+            userId,
+          },
+          required: false,
+        },
+        {
+          model: DocumentGroup,
+          as: "documentGroupMemberships",
+          required: false,
+          // use of "separate" property: sequelize breaks when there are
+          // nested "includes" with alternating values for "required"
+          // see https://github.com/sequelize/sequelize/issues/9869
+          separate: true,
+          // include for groups that are members of this collection,
+          // of which userId is a member of, resulting in:
+          // CollectionGroup [inner join] Group [inner join] GroupUser [where] userId
+          include: [
+            {
+              model: Group,
+              as: "group",
+              required: true,
+              include: [
+                {
+                  model: GroupUser,
+                  as: "groupMemberships",
+                  required: true,
+                  where: {
+                    userId,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: Collection,
+          as: "collection",
+          // where: {
+          //   // collectionId: {
+          //   //   [Op.eq]: "$document.collectionId$",
+          //   // },
+          //   // id: {
+          //   //   [Op.col]: "document.collectionId",
+          //   // },
+          //   // id: {
+          //   //   [Op.in]: [
+          //   //     Sequelize.literal(`(
+          //   //     SELECT "collection"."id" FROM "collections" AS "collection"
+          //   //     WHERE "collection"."id" = "document"."collectionId"
+          //   //   )`),
+          //   //   ],
+          //   // },
+          //   id: {
+          //     [Op.in]: [
+          //       Sequelize.literal(`(
+          //       SELECT "collection"."id" FROM collection
+          //       WHERE "collection"."id" = "document"."collectionId"
+          //     )`),
+          //     ],
+          //   },
+          // },
+        },
+      ],
+    };
+  },
+  withCollectionAndMembership: (userId: string, paranoid = true) => {
+    if (userId) {
+      return {
+        include: [
+          {
+            model: Collection.scope({
+              method: ["withDocumentMembership", userId],
+            }),
+            as: "collection",
+            paranoid,
+          },
+        ],
+      };
+    }
+
+    return {
+      include: [
+        {
+          model: Collection,
+          as: "collection",
+        },
+      ],
+    };
+  },
 }))
 @Table({ tableName: "documents", modelName: "document" })
 @Fix
@@ -235,6 +339,10 @@ class Document extends ParanoidModel {
 
   @Column(DataType.ARRAY(DataType.UUID))
   collaboratorIds: string[] = [];
+
+  @IsIn([["read", "read_write"]])
+  @Column
+  permission: "read" | "read_write" | null;
 
   // getters
 
@@ -402,6 +510,18 @@ class Document extends ParanoidModel {
   @HasMany(() => View)
   views: View[];
 
+  @HasMany(() => DocumentUser, "documentId")
+  documentMemberships: DocumentUser[];
+
+  @HasMany(() => DocumentGroup, "documentId")
+  documentGroupMemberships: DocumentGroup[];
+
+  @BelongsToMany(() => User, () => DocumentUser)
+  users: User[];
+
+  @BelongsToMany(() => Group, () => DocumentGroup)
+  groups: Group[];
+
   static defaultScopeWithUser(userId: string) {
     const collectionScope: Readonly<ScopeOptions> = {
       method: ["withCollectionPermissions", userId],
@@ -417,6 +537,7 @@ class Document extends ParanoidModel {
     options: FindOptions<Document> & {
       userId?: string;
       includeState?: boolean;
+      collectionId?: string;
     } = {}
   ): Promise<Document | null> {
     // allow default preloading of collection membership if `userId` is passed in find options
@@ -429,6 +550,9 @@ class Document extends ParanoidModel {
       },
       {
         method: ["withViews", options.userId],
+      },
+      {
+        method: ["withMembership", options.userId],
       },
     ]);
 

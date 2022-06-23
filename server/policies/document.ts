@@ -1,4 +1,5 @@
 import invariant from "invariant";
+import { some } from "lodash";
 import { Document, Revision, User, Team } from "@server/models";
 import { allow, _cannot as cannot } from "./cancan";
 
@@ -14,12 +15,31 @@ allow(User, ["read", "download"], Document, (user, document) => {
     return false;
   }
 
-  // existence of collection option is not required here to account for share tokens
-  if (document.collection && cannot(user, "read", document.collection)) {
-    return false;
+  if (user.isAdmin) {
+    return true;
   }
 
-  return user.teamId === document.teamId;
+  invariant(
+    document.documentMemberships,
+    "documentMemberships should be preloaded, did you forget withMembership scope?"
+  );
+
+  const allMemberships = [
+    ...document.documentMemberships,
+    ...document.documentGroupMemberships,
+  ];
+
+  if (allMemberships.length === 0) {
+    if (document.collection && cannot(user, "read", document.collection)) {
+      return false;
+    } else {
+      return user.teamId === document?.teamId;
+    }
+  } else {
+    return some(allMemberships, (m) =>
+      ["read", "read_write", "maintainer"].includes(m.permission)
+    );
+  }
 });
 
 allow(User, "star", Document, (user, document) => {
@@ -72,6 +92,22 @@ allow(User, "share", Document, (user, document) => {
   if (document.deletedAt) {
     return false;
   }
+
+  invariant(
+    document.documentMemberships,
+    "documentMembership should be preloaded, did you forget withMembership scope?"
+  );
+  const allMemberships = [
+    ...document.documentMemberships,
+    ...document.documentGroupMemberships,
+  ];
+
+  if (allMemberships.length) {
+    return some(allMemberships, (m) =>
+      ["read_write", "maintainer"].includes(m.permission)
+    );
+  }
+
   invariant(
     document.collection,
     "collection is missing, did you forget to include in the query scope?"
@@ -95,11 +131,32 @@ allow(User, "update", Document, (user, document) => {
     return false;
   }
 
-  if (cannot(user, "update", document.collection)) {
-    return false;
+  if (!document.documentMemberships) {
+    document.documentMemberships = [];
+  }
+  invariant(
+    document.documentMemberships,
+    "documentMemberships should be preloaded, did you forget withMembership scope?"
+  );
+
+  const allMemberships = [
+    ...document.documentMemberships,
+    ...document.documentGroupMemberships,
+  ];
+
+  if (allMemberships.length === 0) {
+    if (cannot(user, "update", document.collection)) {
+      return false;
+    } else {
+      return user.teamId === document?.teamId;
+    }
+  } else {
+    return some(allMemberships, (m) =>
+      ["read_write", "maintainer"].includes(m.permission)
+    );
   }
 
-  return user.teamId === document.teamId;
+  // return user.teamId === document?.teamId;
 });
 
 allow(User, "createChildDocument", Document, (user, document) => {

@@ -52,10 +52,40 @@ allow(User, ["read", "star", "unstar"], Collection, (user, collection) => {
       collection.memberships,
       "membership should be preloaded, did you forget withMembership scope?"
     );
+
     const allMemberships = [
       ...collection.memberships,
       ...collection.collectionGroupMemberships,
     ];
+
+    return some(allMemberships, (m) =>
+      ["read", "read_write", "maintainer"].includes(m.permission)
+    );
+  }
+
+  return true;
+});
+
+allow(User, "readOverview", Collection, (user, collection) => {
+  if (!collection || user.teamId !== collection.teamId) {
+    return false;
+  }
+  if (user.isAdmin) {
+    return true;
+  }
+
+  if (!collection.permission) {
+    invariant(
+      collection.memberships,
+      "membership should be preloaded, did you forget withMembership scope?"
+    );
+    const allMemberships = [
+      ...collection.memberships,
+      ...collection.collectionGroupMemberships,
+      ...collection.documentMemberships,
+      ...collection.documentGroupMemberships,
+    ];
+
     return some(allMemberships, (m) =>
       ["read", "read_write", "maintainer"].includes(m.permission)
     );
@@ -115,6 +145,9 @@ allow(User, ["publish", "update"], Collection, (user, collection) => {
       ...collection.memberships,
       ...collection.collectionGroupMemberships,
     ];
+    // if (allMemberships.length === 0) {
+    //   return collection.teamId === user.teamId;
+    // }
     return some(allMemberships, (m) =>
       ["read_write", "maintainer"].includes(m.permission)
     );

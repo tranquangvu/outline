@@ -15,6 +15,7 @@ import {
   DownloadIcon,
   RestoreIcon,
   CrossIcon,
+  PadlockIcon,
 } from "outline-icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -28,11 +29,13 @@ import Document from "~/models/Document";
 import DocumentDelete from "~/scenes/DocumentDelete";
 import DocumentMove from "~/scenes/DocumentMove";
 import DocumentPermanentDelete from "~/scenes/DocumentPermanentDelete";
+import DocumentPermissions from "~/scenes/DocumentPermissions";
 import CollectionIcon from "~/components/CollectionIcon";
 import ContextMenu from "~/components/ContextMenu";
 import OverflowMenuButton from "~/components/ContextMenu/OverflowMenuButton";
 import Separator from "~/components/ContextMenu/Separator";
 import Template from "~/components/ContextMenu/Template";
+import DocumentTemplatizeDialog from "~/components/DocumentTemplatizeDialog";
 import Flex from "~/components/Flex";
 import Modal from "~/components/Modal";
 import Switch from "~/components/Switch";
@@ -101,6 +104,11 @@ function DocumentMenu({
     setShowPermanentDeleteModal,
   ] = React.useState(false);
   const [showMoveModal, setShowMoveModal] = React.useState(false);
+  const [showTemplateModal, setShowTemplateModal] = React.useState(false);
+  const [
+    showCollectionPermissions,
+    setShowCollectionPermissions,
+  ] = React.useState(false);
   const file = React.useRef<HTMLInputElement>(null);
 
   const handleOpen = React.useCallback(() => {
@@ -253,6 +261,195 @@ function DocumentMenu({
     [history, showToast, collection, documents, document.id]
   );
 
+  const items: MenuItem[] = React.useMemo(
+    () => [
+      {
+        type: "button",
+        title: t("Restore"),
+        visible: (!!collection && can.restore) || can.unarchive,
+        onClick: (ev) => handleRestore(ev),
+        icon: <RestoreIcon />,
+      },
+      {
+        type: "submenu",
+        title: t("Restore"),
+        visible: !collection && !!can.restore && restoreItems.length !== 0,
+        style: {
+          left: -170,
+          position: "relative",
+          top: -40,
+        },
+        icon: <RestoreIcon />,
+        hover: true,
+        items: [
+          {
+            type: "heading",
+            title: t("Choose a collection"),
+          },
+          ...restoreItems,
+        ],
+      },
+      {
+        type: "button",
+        title: t("Unstar"),
+        onClick: handleUnstar,
+        visible: document.isStarred && !!can.unstar,
+        icon: <UnstarredIcon />,
+      },
+      {
+        type: "button",
+        title: t("Star"),
+        onClick: handleStar,
+        visible: !document.isStarred && !!can.star,
+        icon: <StarredIcon />,
+      },
+      actionToMenuItem(pinDocument, context),
+      {
+        type: "separator",
+      },
+      {
+        type: "route",
+        title: t("Edit"),
+        to: editDocumentUrl(document),
+        visible: !!can.update && !team.collaborativeEditing,
+        icon: <EditIcon />,
+      },
+      {
+        type: "route",
+        title: t("New nested document"),
+        to: newDocumentPath(document.collectionId, {
+          parentDocumentId: document.id,
+        }),
+        visible: !!can.createChildDocument,
+        icon: <NewDocumentIcon />,
+      },
+      {
+        type: "button",
+        title: t("Import document"),
+        visible: can.createChildDocument,
+        onClick: handleImportDocument,
+        icon: <ImportIcon />,
+      },
+      // {
+      //   type: "button",
+      //   title: `${t("Create template")}…`,
+      //   onClick: () => setShowTemplateModal(true),
+      //   visible: !!can.update && !document.isTemplate && !document.isDraft,
+      //   icon: <ShapesIcon />,
+      // },
+      {
+        type: "button",
+        title: t("Duplicate"),
+        onClick: handleDuplicate,
+        visible: !!can.update,
+        icon: <DuplicateIcon />,
+      },
+      {
+        type: "button",
+        title: t("Unpublish"),
+        onClick: handleUnpublish,
+        visible: !!can.unpublish,
+        icon: <UnpublishIcon />,
+      },
+      {
+        type: "button",
+        title: t("Archive"),
+        onClick: handleArchive,
+        visible: !!can.archive,
+        icon: <ArchiveIcon />,
+      },
+      {
+        type: "button",
+        title: `${t("Move")}…`,
+        onClick: () => setShowMoveModal(true),
+        visible: !!can.move,
+        icon: <MoveIcon />,
+      },
+      {
+        type: "button",
+        title: `${t("Permissions")}…`,
+        visible: can.update,
+        onClick: () => setShowCollectionPermissions(true),
+        icon: <PadlockIcon />,
+      },
+      {
+        type: "button",
+        title: `${t("Delete")}…`,
+        dangerous: true,
+        onClick: () => setShowDeleteModal(true),
+        visible: !!can.delete,
+        icon: <TrashIcon />,
+      },
+      {
+        type: "button",
+        title: `${t("Permanently delete")}…`,
+        dangerous: true,
+        onClick: () => setShowPermanentDeleteModal(true),
+        visible: can.permanentDelete,
+        icon: <CrossIcon />,
+      },
+      {
+        type: "separator",
+      },
+      {
+        type: "route",
+        title: t("History"),
+        to: isRevision ? documentUrl(document) : documentHistoryUrl(document),
+        visible: canViewHistory,
+        icon: <HistoryIcon />,
+      },
+      {
+        type: "button",
+        title: t("Download"),
+        onClick: document.download,
+        visible: !!can.download,
+        icon: <DownloadIcon />,
+      },
+      {
+        type: "button",
+        title: t("Print"),
+        onClick: handlePrint,
+        visible: !!showDisplayOptions,
+        icon: <PrintIcon />,
+      },
+    ],
+    [
+      can.archive,
+      can.createChildDocument,
+      can.delete,
+      can.download,
+      can.move,
+      can.permanentDelete,
+      can.restore,
+      can.star,
+      can.unarchive,
+      can.unpublish,
+      can.unstar,
+      can.update,
+      canViewHistory,
+      collection,
+      context,
+      document,
+      handleArchive,
+      handleDuplicate,
+      handleImportDocument,
+      handlePrint,
+      handleRestore,
+      handleStar,
+      handleUnpublish,
+      handleUnstar,
+      isRevision,
+      restoreItems,
+      showDisplayOptions,
+      t,
+      team.collaborativeEditing,
+    ]
+  );
+
+  if (!items.length || items.every((item) => !item.visible)) {
+    return null;
+  }
+
   return (
     <>
       <VisuallyHidden>
@@ -387,6 +584,13 @@ function DocumentMenu({
             },
             {
               type: "button",
+              title: `${t("Permissions")}…`,
+              visible: can.update,
+              onClick: () => setShowCollectionPermissions(true),
+              icon: <PadlockIcon />,
+            },
+            {
+              type: "button",
               title: `${t("Delete")}…`,
               dangerous: true,
               onClick: () => setShowDeleteModal(true),
@@ -508,6 +712,28 @@ function DocumentMenu({
                 document={document}
                 onSubmit={() => setShowPermanentDeleteModal(false)}
               />
+            </Modal>
+          )}
+          {can.update && (
+            <Modal
+              title={t("Create template")}
+              onRequestClose={() => setShowTemplateModal(false)}
+              isOpen={showTemplateModal}
+              isCentered
+            >
+              <DocumentTemplatizeDialog
+                documentId={document.id}
+                // onSubmit={() => setShowTemplateModal(false)}
+              />
+            </Modal>
+          )}
+          {can.update && (
+            <Modal
+              title={t("Document permissions")}
+              onRequestClose={() => setShowCollectionPermissions(false)}
+              isOpen={showCollectionPermissions}
+            >
+              <DocumentPermissions document={document} />
             </Modal>
           )}
         </>

@@ -16,6 +16,8 @@ type SaveOptions = {
   done?: boolean;
   autosave?: boolean;
   lastRevision?: number;
+  permission?: string;
+  sharing?: boolean;
 };
 
 export default class Document extends ParanoidModel {
@@ -77,6 +79,18 @@ export default class Document extends ParanoidModel {
   @Field
   @observable
   parentDocumentId: string | undefined;
+
+  @Field
+  @observable
+  permission: "read" | "read_write" | void;
+
+  @Field
+  @observable
+  sharing: boolean;
+
+  @Field
+  @observable
+  name: string;
 
   collaboratorIds: string[];
 
@@ -293,9 +307,14 @@ export default class Document extends ParanoidModel {
 
     this.lastViewedAt = new Date().toString();
 
-    return this.store.rootStore.views.create({
-      documentId: this.id,
-    });
+    return this.store.rootStore.views.create(
+      {
+        documentId: this.id,
+      }
+      // {
+      //   collectionId: this.collectionId,
+      // }
+    );
   };
 
   @action

@@ -3,6 +3,8 @@ import AuthStore from "./AuthStore";
 import CollectionGroupMembershipsStore from "./CollectionGroupMembershipsStore";
 import CollectionsStore from "./CollectionsStore";
 import DialogsStore from "./DialogsStore";
+import DocumentGroupMembershipsStore from "./DocumentGroupMembershipsStore";
+import DocumentMembershipsStore from "./DocumentMembershipsStore";
 import DocumentPresenceStore from "./DocumentPresenceStore";
 import DocumentsStore from "./DocumentsStore";
 import EventsStore from "./EventsStore";
@@ -48,6 +50,8 @@ export default class RootStore {
   views: ViewsStore;
   toasts: ToastsStore;
   fileOperations: FileOperationsStore;
+  documentMemberships: DocumentMembershipsStore;
+  documentGroupMemberships: DocumentGroupMembershipsStore;
 
   constructor() {
     // PoliciesStore must be initialized before AuthStore
@@ -56,6 +60,8 @@ export default class RootStore {
     this.auth = new AuthStore(this);
     this.collections = new CollectionsStore(this);
     this.collectionGroupMemberships = new CollectionGroupMembershipsStore(this);
+    this.documentGroupMemberships = new DocumentGroupMembershipsStore(this);
+    this.documentMemberships = new DocumentMembershipsStore(this);
     this.dialogs = new DialogsStore();
     this.documents = new DocumentsStore(this);
     this.events = new EventsStore(this);

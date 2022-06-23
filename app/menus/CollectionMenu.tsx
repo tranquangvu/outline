@@ -303,7 +303,7 @@ function CollectionMenu({
     ]
   );
 
-  if (!items.length) {
+  if (!items.length || items.every((item) => !item.visible)) {
     return null;
   }
 

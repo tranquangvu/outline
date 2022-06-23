@@ -44,6 +44,7 @@ export function serialize(
   target: Attachment | Team | Collection | Document | User | Group | null
 ): Policy {
   const output = {};
+
   abilities.forEach((ability) => {
     if (model instanceof ability.model && target instanceof ability.target) {
       let response = true;

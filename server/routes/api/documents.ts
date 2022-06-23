@@ -27,12 +27,21 @@ import {
   User,
   View,
   Team,
+  DocumentUser,
+  Group,
+  DocumentGroup,
+  GroupUser,
 } from "@server/models";
-import { authorize, cannot } from "@server/policies";
+import { authorize, cannot, can } from "@server/policies";
 import {
   presentCollection,
   presentDocument,
+  presentDocumentMembership,
   presentPolicies,
+  presentUser,
+  presentGroup,
+  presentDocumentGroupMembership,
+  presentMembership,
 } from "@server/presenters";
 import {
   assertUuid,
@@ -84,7 +93,7 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
     assertUuid(collectionId, "collection must be a UUID");
     where = { ...where, collectionId };
     const collection = await Collection.scope({
-      method: ["withMembership", user.id],
+      method: ["withDocumentMembership", user.id],
     }).findByPk(collectionId);
     authorize(user, "read", collection);
 
@@ -137,8 +146,29 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
 
   assertSort(sort, Document);
 
-  const documents = await Document.defaultScopeWithUser(user.id).findAll({
+  const collectionScope: Readonly<ScopeOptions> = {
+    method: ["withCollectionPermissions", user.id],
+  };
+  const viewScope: Readonly<ScopeOptions> = {
+    method: ["withViews", user.id],
+  };
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
+
+  const documents = await Document.scope([
+    "defaultScope",
+    viewScope,
+    membershipScope,
+    collectionScope,
+  ]).findAll({
     where,
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
     order: [[sort, direction]],
     offset: ctx.state.pagination.offset,
     limit: ctx.state.pagination.limit,
@@ -152,10 +182,19 @@ router.post("documents.list", auth(), pagination(), async (ctx) => {
     );
   }
 
+  const filteredDocumentsWithPermission = documents.filter((document) => {
+    if (can(user, "read", document)) {
+      return document;
+    }
+    return null;
+  });
+
   const data = await Promise.all(
-    documents.map((document) => presentDocument(document))
+    filteredDocumentsWithPermission.map((document) => presentDocument(document))
   );
-  const policies = presentPolicies(user, documents);
+
+  const policies = presentPolicies(user, filteredDocumentsWithPermission);
+
   ctx.body = {
     pagination: ctx.state.pagination,
     data,
@@ -292,6 +331,37 @@ router.post("documents.viewed", auth(), pagination(), async (ctx) => {
             }),
             as: "collection",
           },
+          {
+            model: DocumentUser,
+            as: "documentMemberships",
+            where: {
+              userId: user.id,
+            },
+            required: false,
+          },
+          {
+            model: DocumentGroup,
+            as: "documentGroupMemberships",
+            required: false,
+            separate: true,
+            include: [
+              {
+                model: Group,
+                as: "group",
+                required: true,
+                include: [
+                  {
+                    model: GroupUser,
+                    as: "groupMemberships",
+                    required: true,
+                    where: {
+                      userId: user.id,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],
@@ -360,9 +430,13 @@ router.post("documents.drafts", auth(), pagination(), async (ctx) => {
   const collectionScope: Readonly<ScopeOptions> = {
     method: ["withCollectionPermissions", user.id],
   };
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", user.id],
+  };
   const documents = await Document.scope([
     "defaultScope",
     collectionScope,
+    membershipScope,
   ]).findAll({
     where,
     order: [[sort, direction]],
@@ -412,6 +486,7 @@ router.post(
                 : undefined,
           }
         : serializedDocument;
+
     ctx.body = {
       data,
       policies: isPublic ? undefined : presentPolicies(user, [document]),
@@ -840,6 +915,7 @@ router.post("documents.update", auth(), async (ctx) => {
     lastRevision,
     templateId,
     append,
+    permission,
   } = ctx.body;
   const editorVersion = ctx.headers["x-editor-version"] as string | undefined;
   assertPresent(id, "id is required");
@@ -851,12 +927,58 @@ router.post("documents.update", auth(), async (ctx) => {
   let collection: Collection | null | undefined;
 
   const document = await sequelize.transaction(async (transaction) => {
-    const document = await Document.findByPk(id, {
-      userId: user.id,
-      includeState: true,
-      transaction,
+    // const document = await Document.findByPk(id, {
+    //   userId: user.id,
+    //   includeState: true,
+    //   transaction,
+    // });
+    // authorize(user, "update", document);
+    const collectionMembership: Readonly<ScopeOptions> = {
+      method: ["withCollectionAndMembership", user.id],
+    };
+    const documentMembershipsScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user.id],
+    };
+    const document = await Document.scope([
+      documentMembershipsScope,
+      collectionMembership,
+    ]).findOne({
+      where: {
+        id,
+      },
+      include: [
+        {
+          model: User,
+          as: "createdBy",
+          paranoid: false,
+        },
+        {
+          model: User,
+          as: "updatedBy",
+          paranoid: false,
+        },
+      ],
     });
     authorize(user, "update", document);
+
+    // Add document membership for creator
+    if (permission !== "read_write" && document.permission === "read_write") {
+      await DocumentUser.findOrCreate({
+        where: {
+          documentId: document.id,
+          userId: user.id,
+          collectionId: document.collectionId,
+        },
+        defaults: {
+          permission: "read_write",
+          createdById: user.id,
+        },
+      });
+    }
+
+    if (lastRevision && lastRevision !== document.revisionCount) {
+      throw InvalidRequestError("Document has changed since last revision");
+    }
 
     collection = document.collection;
 
@@ -880,6 +1002,20 @@ router.post("documents.update", auth(), async (ctx) => {
   });
 
   invariant(collection, "collection not found");
+
+  if (permission) {
+    Event.schedule({
+      name: "documents.permission_change",
+      documentId: document.id,
+      collectionId: document.collectionId,
+      teamId: document.teamId,
+      actorId: user.id,
+      data: {
+        permission,
+      },
+      ip: ctx.request.ip,
+    });
+  }
 
   document.updatedBy = user;
   document.collection = collection;
@@ -1021,8 +1157,19 @@ router.post("documents.delete", auth(), async (ctx) => {
       ip: ctx.request.ip,
     });
   } else {
-    const document = await Document.findByPk(id, {
-      userId: user.id,
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", ctx.state.user.id],
+    };
+    const document = await Document.scope([membershipScope]).findOne({
+      where: {
+        id,
+      },
+      include: [
+        {
+          model: Collection.scope([membershipScope]),
+          as: "collection",
+        },
+      ],
     });
 
     authorize(user, "delete", document);
@@ -1200,7 +1347,16 @@ router.post("documents.create", auth(), async (ctx) => {
   let parentDocument;
 
   if (parentDocumentId) {
-    parentDocument = await Document.findOne({
+    const collectionScope: Readonly<ScopeOptions> = {
+      method: ["withCollectionPermissions", user.id],
+    };
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", user.id],
+    };
+    parentDocument = await Document.scope([
+      collectionScope,
+      membershipScope,
+    ]).findOne({
       where: {
         id: parentDocumentId,
         collectionId: collection.id,
@@ -1238,11 +1394,361 @@ router.post("documents.create", auth(), async (ctx) => {
   });
 
   document.collection = collection;
+  document.documentMemberships = [];
+  document.documentGroupMemberships = [];
 
   return (ctx.body = {
     data: await presentDocument(document),
     policies: presentPolicies(user, [document]),
   });
 });
+
+router.post("documents.add_user", auth(), async (ctx) => {
+  const { id, userId, permission = "read_write" } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(userId, "userId is required");
+
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
+
+  const user = await User.findByPk(userId);
+  authorize(ctx.state.user, "read", user);
+
+  let membership = await DocumentUser.findOne({
+    where: {
+      userId,
+      documentId: id,
+    },
+  });
+
+  if (!membership) {
+    membership = await DocumentUser.create({
+      userId,
+      permission,
+      collectionId: document.collectionId,
+      documentId: id,
+      createdById: ctx.state.user.id,
+    });
+  } else if (permission) {
+    membership.permission = permission;
+    await membership.save();
+  }
+
+  await Event.create({
+    name: "documents.add_user",
+    userId,
+    collectionId: document.collectionId,
+    documentId: id,
+    teamId: document?.teamId,
+    actorId: ctx.state.user.id,
+    data: {
+      name: user.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  ctx.body = {
+    data: {
+      users: [presentUser(user)],
+      memberships: [presentMembership(membership)],
+    },
+  };
+});
+
+router.post("documents.remove_user", auth(), async (ctx) => {
+  const { id, userId } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(userId, "userId is required");
+
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
+
+  const user = await User.findByPk(userId);
+  authorize(ctx.state.user, "read", user);
+
+  await document.$remove("user", user);
+
+  await Event.create({
+    name: "documents.remove_user",
+    userId,
+    collectionId: document.collectionId,
+    teamId: document.teamId,
+    actorId: ctx.state.user.id,
+    data: {
+      name: user.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  ctx.body = {
+    success: true,
+  };
+});
+
+router.post("documents.add_group", auth(), async (ctx) => {
+  const { id, groupId, permission = "read_write" } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(groupId, "groupId is required");
+
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
+
+  const group = await Group.findByPk(groupId);
+  authorize(ctx.state.user, "read", group);
+
+  let membership = await DocumentGroup.findOne({
+    where: {
+      groupId,
+      collectionId: document.collectionId,
+      documentId: id,
+    },
+  });
+
+  if (!membership) {
+    membership = await DocumentGroup.create({
+      groupId,
+      permission,
+      collectionId: document.collectionId,
+      documentId: id,
+      createdById: ctx.state.user.id,
+    });
+  } else if (permission) {
+    membership.permission = permission;
+    await membership.save();
+  }
+
+  await Event.create({
+    name: "documents.add_group",
+    collectionId: document.collectionId,
+    modelId: groupId,
+    teamId: document.teamId,
+    actorId: ctx.state.user.id,
+    data: {
+      name: group.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  ctx.body = {
+    data: {
+      documentGroupMemberships: [presentDocumentGroupMembership(membership)],
+    },
+  };
+});
+
+router.post("documents.remove_group", auth(), async (ctx) => {
+  const { id, groupId } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(groupId, "groupId is required");
+
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(ctx.state.user, "update", document);
+
+  const group = await Group.findByPk(groupId);
+  authorize(ctx.state.user, "read", group);
+
+  await document.$remove("group", group);
+  await Event.create({
+    name: "documents.remove_group",
+    collectionId: document.collectionId,
+    teamId: document.teamId,
+    actorId: ctx.state.user.id,
+    modelId: groupId,
+    data: {
+      name: group.name,
+    },
+    ip: ctx.request.ip,
+  });
+
+  ctx.body = {
+    success: true,
+  };
+});
+
+router.post("documents.memberships", auth(), pagination(), async (ctx) => {
+  const { id, collectionId, query, permission } = ctx.body;
+  assertUuid(id, "id is required");
+  assertUuid(collectionId, "collectionId is required");
+  const { user } = ctx.state;
+
+  const membershipScope: Readonly<ScopeOptions> = {
+    method: ["withMembership", ctx.state.user.id],
+  };
+  const document = await Document.scope([membershipScope]).findOne({
+    where: {
+      id,
+    },
+    include: [
+      {
+        model: Collection.scope([membershipScope]),
+        as: "collection",
+      },
+    ],
+  });
+  authorize(user, "read", document);
+
+  let where: WhereOptions<DocumentUser> = {
+    documentId: id,
+    collectionId: collectionId,
+  };
+  let userWhere;
+
+  if (query) {
+    userWhere = {
+      name: {
+        [Op.iLike]: `%${query}%`,
+      },
+    };
+  }
+
+  if (permission) {
+    where = { ...where, permission };
+  }
+
+  const memberships = await DocumentUser.findAll({
+    where,
+    order: [["createdAt", "DESC"]],
+    offset: ctx.state.pagination.offset,
+    limit: ctx.state.pagination.limit,
+    include: [
+      {
+        model: User,
+        as: "user",
+        where: userWhere,
+        required: true,
+      },
+    ],
+  });
+
+  ctx.body = {
+    pagination: ctx.state.pagination,
+    data: {
+      documentMemberships: memberships.map(presentDocumentMembership),
+      users: memberships.map((membership) => presentUser(membership.user)),
+    },
+  };
+});
+
+router.post(
+  "documents.group_memberships",
+  auth(),
+  pagination(),
+  async (ctx) => {
+    const { id, collectionId, query, permission } = ctx.body;
+    assertUuid(collectionId, "collectionId is required");
+    assertUuid(id, "id is required");
+    const { user } = ctx.state;
+
+    const membershipScope: Readonly<ScopeOptions> = {
+      method: ["withMembership", ctx.state.user.id],
+    };
+    const document = await Document.scope([membershipScope]).findOne({
+      where: {
+        id,
+      },
+      include: [
+        {
+          model: Collection.scope([membershipScope]),
+          as: "collection",
+        },
+      ],
+    });
+    authorize(user, "read", document);
+
+    let where: WhereOptions<DocumentGroup> = {
+      documentId: id,
+      collectionId: collectionId,
+    };
+    let groupWhere;
+
+    if (query) {
+      groupWhere = {
+        name: {
+          [Op.iLike]: `%${query}%`,
+        },
+      };
+    }
+
+    if (permission) {
+      where = { ...where, permission };
+    }
+
+    const memberships = await DocumentGroup.findAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      offset: ctx.state.pagination.offset,
+      limit: ctx.state.pagination.limit,
+      include: [
+        {
+          model: Group,
+          as: "group",
+          where: groupWhere,
+          required: true,
+        },
+      ],
+    });
+    ctx.body = {
+      pagination: ctx.state.pagination,
+      data: {
+        documentGroupMemberships: memberships.map(
+          presentDocumentGroupMembership
+        ),
+        groups: memberships.map((membership) => presentGroup(membership.group)),
+      },
+    };
+  }
+);
 
 export default router;
