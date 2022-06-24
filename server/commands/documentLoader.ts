@@ -1,6 +1,7 @@
 import invariant from "invariant";
 import { Op, ScopeOptions } from "sequelize";
 import isUUID from "validator/lib/isUUID";
+import { SLUG_URL_REGEX } from "@shared/utils/urlHelpers";
 import {
   NotFoundError,
   InvalidRequestError,
@@ -33,10 +34,6 @@ export default async function loadDocument({
 
   if (!shareId && !(id && user)) {
     throw AuthenticationError(`Authentication or shareId required`);
-  }
-
-  if (id && !isUUID(id)) {
-    throw NotFoundError("Document could not be found for id");
   }
 
   if (shareId) {
@@ -231,8 +228,37 @@ export default async function loadDocument({
     const membershipScope: Readonly<ScopeOptions> = {
       method: ["withMembership", user?.id],
     };
-    document = await Document.scope([collectionScope, membershipScope]).findOne(
-      {
+
+    if (id && !isUUID(id)) {
+      const match = id.match(SLUG_URL_REGEX);
+
+      if (match) {
+        document = await Document.scope([
+          collectionScope,
+          membershipScope,
+        ]).findOne({
+          where: {
+            urlId: match?.[1],
+          },
+          include: [
+            {
+              model: User,
+              as: "createdBy",
+              paranoid: false,
+            },
+            {
+              model: User,
+              as: "updatedBy",
+              paranoid: false,
+            },
+          ],
+        });
+      }
+    } else {
+      document = await Document.scope([
+        collectionScope,
+        membershipScope,
+      ]).findOne({
         where: {
           id,
         },
@@ -248,8 +274,8 @@ export default async function loadDocument({
             paranoid: false,
           },
         ],
-      }
-    );
+      });
+    }
 
     if (!document) {
       throw NotFoundError();
