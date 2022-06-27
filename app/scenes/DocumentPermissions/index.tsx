@@ -33,8 +33,9 @@ function DocumentPermissions({ document }: Props) {
   const user = useCurrentUser();
   const {
     users,
-    groups,
     auth,
+    groups,
+    collections,
     documentMemberships,
     documentGroupMemberships,
   } = useStores();
@@ -194,7 +195,8 @@ function DocumentPermissions({ document }: Props) {
     [document, showToast, t]
   );
 
-  const documentName = document.name;
+  const documentName = document.title;
+  const collectionName = collections?.active?.name;
   const documentGroups = groups.inDocument(document.id, document.collectionId);
   const documentUsers = users.inDocument(document.id, document.collectionId);
   const isEmpty = !documentGroups.length && !documentUsers.length;
@@ -222,9 +224,10 @@ function DocumentPermissions({ document }: Props) {
         )}
         {document.permission === "read" && (
           <Trans
-            defaults="Team members can view documents in the <em>{{ documentName }}</em> collection by default."
+            defaults="Team members can view <em>{{ documentName }}</em> in the <em>{{ collectionName }}</em> collection by default."
             values={{
               documentName,
+              collectionName,
             }}
             components={{
               em: <strong />,
@@ -233,10 +236,10 @@ function DocumentPermissions({ document }: Props) {
         )}
         {document.permission === "read_write" && (
           <Trans
-            defaults="Team members can view and edit documents in the <em>{{ documentName }}</em> collection by
-          default."
+            defaults="Team members can view and edit <em>{{ documentName }}</em> in the <em>{{ collectionName }}</em> collection by default."
             values={{
               documentName,
+              collectionName,
             }}
             components={{
               em: <strong />,
@@ -263,7 +266,14 @@ function DocumentPermissions({ document }: Props) {
           )
         }
       />
-      <Labeled label={t("Additional access")}>
+      <Labeled label={t("Overriden access")}>
+        <DocumentPermissionExplainer size="small">
+          <Trans>
+            This permission overrides all parent collection permission
+            configuration. All access must be specified again if additional
+            accesses are added in this section.
+          </Trans>
+        </DocumentPermissionExplainer>
         <Actions gap={8}>
           <Button
             type="button"
@@ -363,6 +373,10 @@ const PermissionExplainer = styled(Text)`
 
 const Actions = styled(Flex)`
   margin-bottom: 12px;
+`;
+
+const DocumentPermissionExplainer = styled(Text)`
+  margin-bottom: 24px;
 `;
 
 export default observer(DocumentPermissions);

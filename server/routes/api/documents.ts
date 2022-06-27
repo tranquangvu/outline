@@ -998,6 +998,7 @@ router.post("documents.update", auth(), async (ctx) => {
       editorVersion,
       transaction,
       ip: ctx.request.ip,
+      permission,
     });
   });
 

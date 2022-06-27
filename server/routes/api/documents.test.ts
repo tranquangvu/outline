@@ -2688,6 +2688,7 @@ describe("#documents.update", () => {
     expect(res.status).toEqual(200);
     expect(body.data.title).toBe("Test");
     expect(body.policies.length).toBe(1);
+    expect(body.data.permission).toBe(null);
   });
 
   it("should allow editing by read-write document user", async () => {
@@ -2733,6 +2734,7 @@ describe("#documents.update", () => {
     expect(res.status).toEqual(200);
     expect(body.data.title).toBe("Test");
     expect(body.policies.length).toBe(1);
+    expect(body.data.permission).toBe(null);
   });
 
   it("should not allow editing by read-only document user", async () => {
@@ -2852,6 +2854,29 @@ describe("#documents.update", () => {
       },
     });
     expect(res.status).toEqual(403);
+  });
+
+  it("should allow changing document permission to read-only", async () => {
+    const { admin, user, collection, document } = await seed();
+    collection.permission = null;
+    await collection.save();
+    await DocumentUser.create({
+      userId: user.id,
+      collectionId: collection.id,
+      createdById: admin.id,
+      documentId: document.id,
+      permission: "read_write",
+    });
+    const res = await server.post("/api/documents.update", {
+      body: {
+        token: user.getJwtToken(),
+        id: document.id,
+        permission: "read",
+      },
+    });
+    const body = await res.json();
+    expect(res.status).toEqual(200);
+    expect(body.data.permission).toBe("read");
   });
 });
 

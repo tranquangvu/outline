@@ -1,5 +1,6 @@
 import { Transaction } from "sequelize";
 import { Event, Document, User } from "@server/models";
+import { assertIn } from "@server/validation";
 
 type Props = {
   /** The user updating the document */
@@ -24,6 +25,8 @@ type Props = {
   ip: string;
   /** The database transaction to run within */
   transaction: Transaction;
+  /** The document permission */
+  permission?: "read_write" | "read" | "";
 };
 
 /**
@@ -45,6 +48,7 @@ export default async function documentUpdater({
   publish,
   transaction,
   ip,
+  permission,
 }: Props): Promise<Document> {
   const previousTitle = document.title;
 
@@ -68,6 +72,11 @@ export default async function documentUpdater({
     } else {
       document.text = text;
     }
+  }
+
+  if (permission !== undefined) {
+    assertIn(permission, ["read_write", "read", ""], "Invalid permission");
+    document.permission = permission ? permission : null;
   }
 
   const changed = document.changed();
@@ -120,6 +129,20 @@ export default async function documentUpdater({
       data: {
         previousTitle,
         title: document.title,
+      },
+      ip,
+    });
+  }
+
+  if (permission) {
+    Event.schedule({
+      name: "documents.permission_change",
+      documentId: document.id,
+      collectionId: document.collectionId,
+      teamId: document.teamId,
+      actorId: user.id,
+      data: {
+        permission,
       },
       ip,
     });
