@@ -107,7 +107,7 @@ if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) {
               team = await Team.findOne({
                 where: { subdomain: appDomain.teamSubdomain },
               });
-            } else if (env.DEPLOYMENT !== "hosted") {
+            } else if (env.DEPLOYMENT === "hosted") {
               team = await Team.findOne();
             }
 
