@@ -1,14 +1,24 @@
 version: "3"
 services:
+  outline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: ./.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - redis
   redis:
     image: redis
     ports:
-      - "127.0.0.1:6379:6379"
+      - "6379:6379"
     user: "redis:redis"
   postgres:
     image: postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      - "5432:5432"
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: pass
@@ -17,6 +27,6 @@ services:
   s3:
     image: lphoward/fake-s3
     ports:
-      - "127.0.0.1:4569:4569"
+      - "4569:4569"
     volumes:
       - ./fakes3:/fakes3_root
